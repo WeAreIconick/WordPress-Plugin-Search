@@ -1,0 +1,1079 @@
+/**
+ * WordPress.org Plugin Search Block Styles - Dark Theme with Custom Lightbox
+ */
+
+.wp-block-telex-block-wordpress-plugin-search {
+	margin: 2rem 0;
+
+	.wps-search-block {
+		max-width: 100%;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+		background-color: #1a1a1a;
+		color: #fff;
+		border-radius: 12px;
+		padding: 2rem;
+		border: 1px solid #333;
+	}
+
+	// Header styling - dark theme
+	.wps-search-block__header {
+		margin-bottom: 2rem;
+		text-align: center;
+		padding: 1.5rem;
+		background: #2a2a2a;
+		border-radius: 8px;
+		border: 1px solid #444;
+
+		.wps-search-block__title {
+			font-size: 1.5rem;
+			font-weight: 600;
+			margin: 0 0 0.5rem;
+			color: #fff;
+		}
+
+		.wps-search-block__description {
+			font-size: 1rem;
+			color: #e0e0e0;
+			margin: 0;
+			line-height: 1.5;
+		}
+	}
+
+	// Controls section - dark theme
+	.wps-search-block__controls {
+		margin-bottom: 2rem;
+		background: #2a2a2a;
+		border: 1px solid #444;
+		border-radius: 8px;
+		padding: 1.5rem;
+	}
+
+	// Search input with WordPress button structure - dark theme
+	.wps-search-input {
+		display: flex;
+		gap: 0.5rem;
+		max-width: 600px;
+		margin: 0 auto 1rem;
+
+		input {
+			flex: 1;
+			padding: 12px 16px;
+			border: 1px solid #555;
+			border-radius: 4px;
+			font-size: 16px;
+			background: #1a1a1a;
+			color: #fff;
+			transition: border-color 0.15s ease;
+
+			&::placeholder {
+				color: #999;
+			}
+
+			&:focus {
+				outline: none;
+				border-color: #0073aa;
+				box-shadow: 0 0 0 0.2rem rgba(0, 115, 170, 0.25);
+			}
+
+			&:disabled {
+				background: #333;
+				color: #777;
+				cursor: not-allowed;
+			}
+		}
+
+		// WordPress button structure
+		.wp-block-button {
+			flex-shrink: 0;
+
+			.wp-block-button__link.wp-element-button {
+				padding: 12px 24px;
+				border-radius: 3px;
+				font-size: 14px;
+				line-height: 1.4;
+				font-weight: 400;
+				cursor: pointer;
+				text-decoration: none;
+				white-space: nowrap;
+				box-sizing: border-box;
+				transition: all 0.15s ease;
+				display: inline-block;
+
+				&:focus {
+					outline: 2px solid transparent;
+				}
+
+				&:active {
+					color: #fff;
+					transform: none;
+				}
+
+				&:disabled {
+					background: #666 !important;
+					border-color: #666 !important;
+					color: #999 !important;
+					cursor: not-allowed;
+					box-shadow: none !important;
+					transform: none !important;
+				}
+			}
+		}
+	}
+
+	// Filter controls - dark theme
+	.wps-filter-controls {
+		margin-top: 1rem;
+		padding-top: 1rem;
+		border-top: 1px solid #444;
+	}
+
+	.wps-filter-row {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: 1rem;
+		align-items: end;
+		margin-bottom: 1rem;
+	}
+
+	.wps-filter-toggles {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+		gap: 1rem;
+		margin-top: 1rem;
+		padding-top: 1rem;
+		border-top: 1px solid #444;
+	}
+
+	.wps-filter-item {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+
+		label {
+			font-size: 0.875rem;
+			font-weight: 500;
+			color: #fff;
+			margin: 0;
+		}
+
+		// WordPress core select styling - FIXED arrow direction
+		select,
+		.components-select-control__input {
+			padding: 8px 40px 8px 12px;
+			border: 1px solid #8c8f94;
+			border-radius: 4px;
+			background: #1a1a1a;
+			color: #fff;
+			font-size: 14px;
+			cursor: pointer;
+			transition: all 0.15s ease;
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+			line-height: 1.5;
+			min-height: 36px;
+			box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+			appearance: none;
+			// FIXED: Corrected arrow direction (pointing down)
+			background-image: url(data:image/svg+xml;base64,PHN2ZyBmaWxsPSIjOGM4Zjk0IiBoZWlnaHQ9IjIwIiB2aWV3Qm94PSIwIDAgMjAgMjAiIHdpZHRoPSIyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJtNSA3IDUgNSA1LTV6Ii8+PC9zdmc+);
+			background-repeat: no-repeat;
+			background-position: right 12px center;
+
+			&:focus {
+				outline: none;
+				border-color: #0073aa;
+				box-shadow: 0 0 0 0.2rem rgba(0, 115, 170, 0.25);
+			}
+
+			&:disabled {
+				background: #333;
+				color: #777;
+				cursor: not-allowed;
+				border-color: #555;
+			}
+
+			&:hover:not(:disabled) {
+				border-color: #0073aa;
+			}
+
+			option {
+				background: #1a1a1a;
+				color: #fff;
+				padding: 4px 8px;
+			}
+		}
+	}
+
+	// Toggle controls - dark theme with removed blue accents
+	.wps-toggle-item {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.75rem;
+		background: #1a1a1a;
+		border-radius: 6px;
+		border: 1px solid #444;
+
+		input[type="checkbox"] {
+			width: 18px;
+			height: 18px;
+			accent-color: #666; // Removed blue accent
+			cursor: pointer;
+		}
+
+		label {
+			font-size: 0.9rem;
+			font-weight: 500;
+			color: #fff;
+			margin: 0;
+			cursor: pointer;
+			flex: 1;
+		}
+
+		&:hover {
+			background: #2a2a2a;
+			border-color: #555;
+		}
+	}
+
+	// Results info with WordPress button - dark theme with removed blue accent
+	.wps-results-info {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1.5rem;
+		padding: 1rem;
+		background: #2a2a2a;
+		border-radius: 6px;
+		border: 1px solid #444;
+		font-size: 0.9rem;
+		color: #e0e0e0;
+
+		.wps-results-count {
+			font-weight: 500;
+			color: #fff;
+		}
+
+		// WordPress button structure for clear filters - removed blue accent
+		.wp-block-button {
+
+			.wp-block-button__link.wp-element-button {
+				background: transparent;
+				border: none;
+				color: #ccc; // Changed from blue to neutral gray
+				cursor: pointer;
+				font-size: 13px;
+				line-height: 2.15384615;
+				padding: 0;
+				text-decoration: underline;
+				transition: color 0.15s ease;
+
+				&:hover {
+					color: #999;
+				}
+
+				&:focus {
+					color: #777;
+					outline: 1px dotted;
+				}
+			}
+		}
+	}
+
+	// Plugin grid - Fixed alignment with equal heights
+	.wps-plugin-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+		gap: 2rem;
+		margin-bottom: 2rem;
+		align-items: start;
+	}
+
+	.wps-plugin-item {
+		cursor: pointer;
+		transition: transform 0.2s ease;
+		position: relative;
+		background: none;
+		border: none;
+		border-radius: 0;
+		overflow: visible;
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+
+		&:hover {
+			transform: translateY(-2px);
+		}
+
+		&:focus {
+			outline: 2px solid #0073aa;
+			outline-offset: 2px;
+		}
+	}
+
+	// Hidden gems highlight
+	.wps-hidden-gem {
+		position: relative;
+
+		&::before {
+			content: "💎";
+			position: absolute;
+			top: 8px;
+			right: 8px;
+			background: #28a745;
+			color: white;
+			border-radius: 50%;
+			width: 24px;
+			height: 24px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 12px;
+			z-index: 3;
+		}
+	}
+
+	// Screenshot slider - fixed height to ensure alignment
+	.wps-screenshot-slider {
+		position: relative;
+		margin-bottom: 1rem;
+		flex: 0 0 auto;
+	}
+
+	.wps-main-screenshot {
+		width: 100%;
+		height: 240px;
+		background: #2a2a2a;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: 1px solid #444;
+		border-radius: 8px;
+		position: relative;
+		overflow: hidden;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
+
+		img {
+			max-width: 100%;
+			max-height: 100%;
+			height: auto;
+			width: auto;
+			display: block;
+			transition: transform 0.3s ease;
+			object-fit: contain;
+			cursor: zoom-in;
+		}
+
+		&:hover img {
+			transform: scale(1.02);
+		}
+	}
+
+	// Thumbnail navigation - dark theme
+	.wps-screenshot-thumbs {
+		display: flex;
+		gap: 8px;
+		padding: 12px 0;
+		overflow-x: auto;
+		scrollbar-width: thin;
+		scrollbar-color: #444 transparent;
+		justify-content: center;
+		max-width: 100%;
+
+		&::-webkit-scrollbar {
+			height: 4px;
+		}
+
+		&::-webkit-scrollbar-track {
+			background: transparent;
+		}
+
+		&::-webkit-scrollbar-thumb {
+			background: #444;
+			border-radius: 2px;
+
+			&:hover {
+				background: #555;
+			}
+		}
+	}
+
+	.wps-screenshot-thumb {
+		flex-shrink: 0;
+		width: 60px;
+		height: 45px;
+		border: 2px solid transparent;
+		border-radius: 6px;
+		overflow: hidden;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		position: relative;
+		background: #2a2a2a;
+
+		&:hover {
+			border-color: #0073aa;
+			transform: scale(1.05);
+			box-shadow: 0 2px 8px rgba(0, 115, 170, 0.3);
+		}
+
+		&.active {
+			border-color: #0073aa;
+			box-shadow: 0 0 0 1px #0073aa;
+			transform: scale(1.05);
+		}
+
+		img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+			display: block;
+		}
+	}
+
+	// No screenshot placeholder - fixed height to match screenshots
+	.wps-no-screenshot {
+		width: 100%;
+		height: 240px;
+		background: #2a2a2a;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		color: #999;
+		font-size: 0.9rem;
+		text-align: center;
+		border: 2px dashed #444;
+		border-radius: 8px;
+		gap: 0.75rem;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
+		padding: 0 !important;
+
+		.dashicons {
+			font-size: 3rem;
+			opacity: 0.4;
+			color: #444;
+		}
+
+		span:last-child {
+			font-weight: 500;
+		}
+	}
+
+	// Plugin info - grow to fill remaining space
+	.wps-plugin-info {
+		text-align: center;
+		padding-top: 0.5rem;
+		flex: 1 1 auto;
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+	}
+
+	.wps-plugin-title {
+		font-size: 1.3rem;
+		font-weight: 600;
+		margin: 0 0 0.75rem;
+		color: #fff;
+		line-height: 1.3;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+
+		.wps-plugin-item:hover & {
+			color: #0073aa;
+		}
+	}
+
+	.wps-plugin-meta {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 1rem;
+		font-size: 0.9rem;
+		color: #e0e0e0;
+		flex-wrap: wrap;
+		margin-top: auto;
+	}
+
+	.wps-plugin-rating {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+
+		.wps-rating-stars {
+			color: #ffc107;
+			font-size: 1rem;
+		}
+
+		.wps-rating-text {
+			color: #e0e0e0;
+			font-size: 0.8rem;
+		}
+	}
+
+	.wps-plugin-installs {
+		font-weight: 500;
+		color: #28a745;
+	}
+
+	// Loading states - dark theme
+	.wps-loading,
+ .wps-loading-initial {
+		text-align: center;
+		padding: 4rem 2rem;
+		color: #e0e0e0;
+
+		p {
+			margin: 1rem 0 0;
+			font-size: 1.1rem;
+			font-weight: 500;
+			color: #fff;
+		}
+	}
+
+	// No results - dark theme
+	.wps-no-results {
+		text-align: center;
+		padding: 4rem 2rem;
+		grid-column: 1 / -1;
+		background: #2a2a2a;
+		border-radius: 12px;
+		border: 2px dashed #444;
+		color: #e0e0e0;
+		margin: 0;
+		font-size: 1.1rem;
+
+		.wps-search-suggestion {
+			margin-top: 1.5rem;
+			font-size: 1rem;
+			color: #fff;
+
+			ul {
+				list-style: none;
+				padding: 0;
+				margin: 1rem 0 0;
+
+				li {
+					padding: 0.25rem 0;
+					color: #fff;
+
+					&::before {
+						content: "• ";
+						color: #0073aa;
+					}
+				}
+			}
+
+			strong {
+				color: #0073aa;
+			}
+		}
+	}
+
+	// Error display with WordPress button - dark theme
+	.wps-error {
+		text-align: center;
+		padding: 3rem 2rem;
+		grid-column: 1 / -1;
+		background: #dc3545;
+		border: 2px solid #c82333;
+		border-radius: 12px;
+		color: white;
+
+		h3 {
+			margin: 0 0 1rem;
+			color: white;
+			font-size: 1.3rem;
+		}
+
+		p {
+			margin: 0 0 1.5rem;
+			font-size: 1.1rem;
+		}
+
+		// WordPress button structure for retry
+		.wp-block-button {
+
+			.wp-block-button__link.wp-element-button {
+				padding: 0 12px;
+				min-height: 32px;
+				border: 1px solid rgba(255, 255, 255, 0.3);
+				border-radius: 3px;
+				background: rgba(255, 255, 255, 0.1);
+				color: #fff;
+				font-size: 13px;
+				line-height: 2.15384615;
+				font-weight: 400;
+				cursor: pointer;
+				text-decoration: none;
+				white-space: nowrap;
+				box-sizing: border-box;
+				transition: all 0.15s ease;
+
+				&:hover {
+					background: rgba(255, 255, 255, 0.2);
+					border-color: rgba(255, 255, 255, 0.5);
+				}
+
+				&:focus {
+					border-color: rgba(255, 255, 255, 0.5);
+					box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
+					outline: 2px solid transparent;
+				}
+			}
+		}
+	}
+
+	// Load More button with WordPress classes - dark theme
+	.wps-load-more-container {
+		text-align: center;
+		margin-top: 2rem;
+		padding: 1rem;
+
+		.wps-load-more-spinner {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 0.5rem;
+			color: #e0e0e0;
+			font-size: 0.9rem;
+		}
+	}
+
+	// Pagination - dark theme
+	.wps-pagination {
+		margin-top: 3rem;
+	}
+
+	.wps-pagination-controls {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	// WordPress button structure for pagination
+	.wp-block-button {
+
+		.wp-block-button__link.wp-element-button {
+
+			&.wps-pagination-button {
+				padding: 0 12px;
+				min-height: 32px;
+				border: 1px solid #ddd;
+				border-radius: 3px;
+				background: #f7f7f7;
+				color: #555;
+				font-size: 13px;
+				line-height: 2.15384615;
+				font-weight: 400;
+				cursor: pointer;
+				text-decoration: none;
+				white-space: nowrap;
+				box-sizing: border-box;
+				transition: all 0.15s ease;
+
+				&:hover {
+					background: #fafafa;
+					border-color: #999;
+					color: #23282d;
+				}
+
+				&:focus {
+					border-color: #5b9dd9;
+					box-shadow: 0 0 0 1px #5b9dd9;
+					outline: 2px solid transparent;
+				}
+
+				&.active {
+					background: #0073aa;
+					border-color: #0073aa;
+					color: white;
+					cursor: default;
+
+					&:hover {
+						background: #0073aa;
+						border-color: #0073aa;
+					}
+				}
+			}
+		}
+	}
+
+	// Loading spinner - dark theme
+	.wps-spinner {
+		display: inline-block;
+		width: 2.5rem;
+		height: 2.5rem;
+		border: 3px solid #444;
+		border-top: 3px solid #0073aa;
+		border-radius: 50%;
+		animation: wps-spin 1s linear infinite;
+		margin-bottom: 1rem;
+	}
+
+	@keyframes wps-spin {
+
+		0% {
+			transform: rotate(0deg);
+		}
+
+		100% {
+			transform: rotate(360deg);
+		}
+	}
+
+	// CUSTOM LIGHTBOX STYLES - Fixed close button positioning
+	.wps-lightbox {
+		position: fixed;
+		top: 0;
+		left: 0;
+		width: 100vw;
+		height: 100vh;
+		z-index: 999999;
+		display: none;
+		align-items: center;
+		justify-content: center;
+		padding: 2rem;
+		box-sizing: border-box;
+	}
+
+	.wps-lightbox-backdrop {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		background: rgba(0, 0, 0, 0.9);
+		cursor: pointer;
+	}
+
+	.wps-lightbox-container {
+		position: relative;
+		background: #fff;
+		border-radius: 8px;
+		max-width: 90vw;
+		max-height: 90vh;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+		z-index: 2;
+	}
+
+	.wps-lightbox-header {
+		padding: 1.5rem 2rem;
+		border-bottom: 1px solid #e0e0e0;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		background: #f8f9fa;
+		flex-shrink: 0;
+	}
+
+	.wps-lightbox-title {
+		margin: 0;
+		font-size: 1.25rem;
+		font-weight: 600;
+		color: #333;
+		flex: 1;
+		margin-right: 1rem;
+	}
+
+	// FIXED: Close button with proper z-index and positioning
+	.wps-lightbox-close {
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		padding: 0.5rem;
+		border-radius: 4px;
+		color: #666;
+		transition: all 0.2s ease;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 40px;
+		height: 40px;
+		font-size: 24px;
+		line-height: 1;
+		z-index: 1000; // Ensure it's always on top
+		position: relative;
+
+		&:hover {
+			background: #e9ecef;
+			color: #333;
+		}
+
+		&:focus {
+			outline: 2px solid #0073aa;
+			outline-offset: 2px;
+			background: #e9ecef;
+		}
+	}
+
+	.wps-lightbox-content {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
+
+	.wps-lightbox-main {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		position: relative;
+		padding: 2rem;
+		background: #f8f9fa;
+		min-height: 400px;
+	}
+
+	.wps-lightbox-image {
+		max-width: 100%;
+		max-height: 100%;
+		height: auto;
+		width: auto;
+		object-fit: contain;
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+		border-radius: 4px;
+	}
+
+	.wps-lightbox-nav {
+		position: absolute;
+		top: 50%;
+		transform: translateY(-50%);
+		background: rgba(0, 0, 0, 0.6);
+		color: white;
+		border: none;
+		border-radius: 50%;
+		width: 50px;
+		height: 50px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		font-size: 20px;
+		z-index: 3;
+
+		&:hover {
+			background: rgba(0, 0, 0, 0.8);
+			transform: translateY(-50%) scale(1.1);
+		}
+
+		&:focus {
+			outline: 2px solid #0073aa;
+			outline-offset: 2px;
+		}
+
+		&:disabled {
+			opacity: 0.4;
+			cursor: not-allowed;
+
+			&:hover {
+				background: rgba(0, 0, 0, 0.6);
+				transform: translateY(-50%);
+			}
+		}
+	}
+
+	.wps-lightbox-prev {
+		left: 1rem;
+	}
+
+	.wps-lightbox-next {
+		right: 1rem;
+	}
+
+	.wps-lightbox-counter {
+		padding: 1rem 2rem;
+		border-top: 1px solid #e0e0e0;
+		background: #fff;
+		text-align: center;
+		font-size: 0.9rem;
+		color: #666;
+		font-weight: 500;
+		flex-shrink: 0;
+	}
+
+	// No JavaScript fallback - dark theme
+	.wps-no-javascript {
+		text-align: center;
+		padding: 3rem 2rem;
+		background: #2a2a2a;
+		border-radius: 12px;
+		border: 2px solid #444;
+		color: #fff;
+
+		h3 {
+			margin: 0 0 1rem;
+			color: #fff;
+			font-size: 1.3rem;
+		}
+
+		p {
+			margin: 0;
+			font-size: 1rem;
+			line-height: 1.5;
+
+			a {
+				color: #0073aa;
+				text-decoration: none;
+
+				&:hover {
+					text-decoration: underline;
+				}
+			}
+		}
+	}
+
+	// RESPONSIVE DESIGN
+	@media (max-width: 767px) {
+
+		.wps-plugin-grid {
+			grid-template-columns: 1fr;
+			gap: 2rem;
+		}
+
+		.wps-search-input {
+			flex-direction: column;
+
+			.wp-block-button {
+				width: 100%;
+
+				.wp-block-button__link.wp-element-button {
+					width: 100%;
+					text-align: center;
+				}
+			}
+		}
+
+		.wps-filter-row,
+ .wps-filter-toggles {
+			grid-template-columns: 1fr;
+		}
+
+		.wps-results-info {
+			flex-direction: column;
+			gap: 0.5rem;
+			text-align: center;
+		}
+
+		.wps-main-screenshot,
+ .wps-no-screenshot {
+			height: 200px;
+		}
+
+		// Mobile lightbox adjustments
+		.wps-lightbox-container {
+			max-width: 95vw;
+			max-height: 95vh;
+		}
+
+		.wps-lightbox-header {
+			padding: 1rem;
+		}
+
+		.wps-lightbox-title {
+			font-size: 1.1rem;
+		}
+
+		.wps-lightbox-main {
+			padding: 1rem;
+			min-height: 300px;
+		}
+
+		.wps-lightbox-nav {
+			width: 40px;
+			height: 40px;
+			font-size: 16px;
+		}
+
+		.wps-lightbox-prev {
+			left: 0.5rem;
+		}
+
+		.wps-lightbox-next {
+			right: 0.5rem;
+		}
+
+		.wps-lightbox-counter {
+			padding: 0.75rem 1rem;
+		}
+	}
+
+	// Tablet
+	@media (min-width: 768px) and (max-width: 1023px) {
+
+		.wps-plugin-grid {
+			grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+		}
+
+		.wps-filter-row,
+ .wps-filter-toggles {
+			grid-template-columns: repeat(2, 1fr);
+		}
+
+		.wps-main-screenshot,
+ .wps-no-screenshot {
+			height: 220px;
+		}
+	}
+
+	// Large screens
+	@media (min-width: 1400px) {
+
+		.wps-plugin-grid {
+			grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+		}
+
+		.wps-main-screenshot {
+			height: 260px;
+		}
+	}
+
+	// Reduced motion support
+	@media (prefers-reduced-motion: reduce) {
+
+		* {
+			transition: none !important;
+			animation: none !important;
+		}
+
+		.wps-plugin-item:hover {
+			transform: none;
+		}
+
+		.wps-main-screenshot:hover img {
+			transform: none;
+		}
+
+		.wps-lightbox-nav:hover {
+			transform: translateY(-50%);
+		}
+	}
+
+	// Focus states
+	.wps-screenshot-thumb:focus {
+		outline: 2px solid #0073aa;
+		outline-offset: 2px;
+	}
+
+	// Print styles
+	@media print {
+
+		.wps-search-block__controls,
+		.wps-pagination,
+		.wps-screenshot-thumbs,
+		.wps-lightbox {
+			display: none !important;
+		}
+
+		.wps-search-block {
+			background: white !important;
+			color: black !important;
+			border: 1px solid #ccc !important;
+		}
+	}
+}

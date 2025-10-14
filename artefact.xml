@@ -1,0 +1,3546 @@
+<?xml version="1.0"?><artefact name="WordPress.org Plugin Search (Remix)" slug="wordpress-plugin-search" type="code-package" schemaVersion="2">
+  <file path="readme.txt">
+    <description>This file contains the readme information for the block. It is used to provide information about the block, its usage, and any other relevant details.</description>
+    <content><![CDATA[=== WordPress.org Plugin Search ===
+
+Contributors:      WordPress Telex
+Tags:              plugins, search, directory
+Tested up to:      6.8
+Stable tag:        0.1.0
+License:           GPLv2 or later
+License URI:       https://www.gnu.org/licenses/gpl-2.0.html
+
+A simple plugin search interface for the WordPress.org repository with WordPress core Modal component.
+
+== Description ==
+
+Add a clean, simple plugin search interface to your website that connects directly to the WordPress.org plugin repository. Now featuring a WordPress-style modal for viewing plugin screenshots.
+
+**Features:**
+
+* Clean, simple search interface
+* Real-time search with instant results
+* Plugin cards showing ratings, install counts, and descriptions
+* WordPress core Modal component for screenshot viewing
+* Responsive design that works on all devices
+* Secure API integration with WordPress.org
+* No external dependencies - uses only WordPress core
+
+**Perfect for:**
+
+* WordPress blogs and resource sites
+* Developer portfolios
+* Plugin comparison pages
+* Any site that wants to help users discover WordPress plugins
+
+The block provides a straightforward way for visitors to search and discover plugins without leaving your site. Results show essential information like ratings, installation counts, and descriptions, with links to download or view more details on WordPress.org.
+
+Screenshots can be viewed in a beautiful WordPress-style modal that provides a clean, accessible viewing experience with proper navigation controls.
+
+== Installation ==
+
+1. Upload the plugin files to `/wp-content/plugins/wordpress-plugin-search/` or install through WordPress admin
+2. Activate the plugin
+3. Add the "WordPress Plugin Search" block to any post or page
+4. Configure search settings in the block sidebar
+
+== Frequently Asked Questions ==
+
+= Does this make external API calls? =
+
+Yes, it uses the official WordPress.org Plugin API to fetch plugin information. All calls are cached for performance.
+
+= Can I customize the appearance? =
+
+Yes, you can customize the styling with CSS and configure display options in the block settings.
+
+= Are there rate limits? =
+
+The block includes built-in caching and follows WordPress.org API best practices to avoid rate limits.
+
+= How do I view plugin screenshots? =
+
+Click on any plugin screenshot to open it in a WordPress-style modal viewer with navigation controls.
+
+== Screenshots ==
+
+1. Simple search interface with clean results
+2. Plugin cards showing ratings and install counts
+3. WordPress core Modal component for screenshot viewing
+4. Block settings in the editor sidebar
+5. Mobile-responsive design
+
+== Changelog ==
+
+= 0.1.0 =
+* Initial release
+* Simple, clean plugin search interface
+* WordPress.org API integration
+* WordPress core Modal component for screenshots
+* Responsive design
+* Secure, cached API calls]]></content>
+  </file>
+  <file path="wordpress-plugin-search.php">
+    <description>This file contains the block registration code in the form of a single block plugin. Any other plugin related functionality should be added to this file. All block rendering functionality should go to the `render.php` file.</description>
+    <content><![CDATA[<?php
+/**
+ * Plugin Name:       WordPress.org Plugin Search
+ * Description:       A simple plugin search interface for the WordPress.org repository.
+ * Version:           0.1.0
+ * Requires at least: 6.0
+ * Requires PHP:      7.4
+ * Author:            WordPress Telex
+ * License:           GPLv2 or later
+ * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain:       wordpress-plugin-search-block-wp
+ *
+ * @package WordPressPluginSearch
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit; // Exit if accessed directly.
+}
+
+/**
+ * Registers the block
+ */
+if ( ! function_exists( 'wordpress_plugin_search_wordpress_plugin_search_block_init' ) ) {
+	function wordpress_plugin_search_wordpress_plugin_search_block_init() {
+		register_block_type( __DIR__ . '/build/' );
+	}
+	add_action( 'init', 'wordpress_plugin_search_wordpress_plugin_search_block_init' );
+}
+
+/**
+ * Register REST API endpoint
+ */
+if ( ! function_exists( 'wordpress_plugin_search_register_api_endpoints' ) ) {
+	function wordpress_plugin_search_register_api_endpoints() {
+		register_rest_route( 'wordpress-plugin-search/v1', '/query', array(
+			'methods' => 'GET',
+			'callback' => 'wordpress_plugin_search_api_query',
+			'permission_callback' => '__return_true',
+			'args' => array(
+				'action' => array(
+					'required' => true,
+					'type' => 'string',
+					'enum' => array( 'query_plugins' ),
+					'sanitize_callback' => 'sanitize_text_field',
+				),
+				'search' => array(
+					'type' => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+				),
+				'browse' => array(
+					'type' => 'string',
+					'enum' => array( 'popular', 'new', 'updated' ),
+					'default' => 'popular',
+					'sanitize_callback' => 'sanitize_text_field',
+				),
+				'per_page' => array(
+					'type' => 'integer',
+					'minimum' => 1,
+					'maximum' => 100,
+					'default' => 100,
+				),
+				'page' => array(
+					'type' => 'integer',
+					'minimum' => 1,
+					'default' => 1,
+				),
+			),
+		) );
+	}
+	add_action( 'rest_api_init', 'wordpress_plugin_search_register_api_endpoints' );
+}
+
+/**
+ * Handle API queries
+ */
+if ( ! function_exists( 'wordpress_plugin_search_api_query' ) ) {
+	function wordpress_plugin_search_api_query( $request ) {
+		// Include admin functions
+		if ( ! function_exists( 'plugins_api' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin-install.php';
+		}
+		
+		$action = sanitize_text_field( $request->get_param( 'action' ) );
+		
+		if ( 'query_plugins' !== $action ) {
+			return new WP_Error( 'invalid_action', 'Invalid action', array( 'status' => 400 ) );
+		}
+		
+		// Build cache key
+		$cache_params = $request->get_params();
+		unset( $cache_params['_wpnonce'] );
+		$cache_key = 'wps_' . hash( 'sha256', wp_json_encode( $cache_params ) );
+		
+		// Check cache
+		$cached_response = get_transient( $cache_key );
+		if ( false !== $cached_response ) {
+			return rest_ensure_response( $cached_response );
+		}
+		
+		// Build API parameters
+		$api_args = array();
+		
+		if ( $request->get_param( 'search' ) ) {
+			$api_args['search'] = sanitize_text_field( $request->get_param( 'search' ) );
+		}
+		
+		if ( $request->get_param( 'browse' ) ) {
+			$browse = sanitize_text_field( $request->get_param( 'browse' ) );
+			if ( in_array( $browse, array( 'popular', 'new', 'updated' ), true ) ) {
+				$api_args['browse'] = $browse;
+			}
+		}
+		
+		if ( $request->get_param( 'per_page' ) ) {
+			$per_page = absint( $request->get_param( 'per_page' ) );
+			if ( $per_page > 0 && $per_page <= 100 ) {
+				$api_args['per_page'] = $per_page;
+			}
+		}
+		
+		if ( $request->get_param( 'page' ) ) {
+			$page = absint( $request->get_param( 'page' ) );
+			if ( $page > 0 ) {
+				$api_args['page'] = $page;
+			}
+		}
+		
+		// Set fields for performance
+		$api_args['fields'] = array(
+			'icons' => true,
+			'active_installs' => true,
+			'short_description' => true,
+			'rating' => true,
+			'num_ratings' => true,
+			'last_updated' => true,
+			'downloaded' => true,
+			'requires' => true,
+			'tested' => true,
+			'download_link' => true,
+			'homepage' => true,
+		);
+		
+		// Make API request
+		$response = plugins_api( $action, $api_args );
+		
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+		
+		// Sanitize response
+		$sanitized_response = wordpress_plugin_search_sanitize_response( $response );
+		
+		// Cache for 1 hour
+		set_transient( $cache_key, $sanitized_response, HOUR_IN_SECONDS );
+		
+		return rest_ensure_response( $sanitized_response );
+	}
+}
+
+/**
+ * Sanitize API response
+ */
+if ( ! function_exists( 'wordpress_plugin_search_sanitize_response' ) ) {
+	function wordpress_plugin_search_sanitize_response( $response ) {
+		$response_array = (array) $response;
+		
+		// Sanitize plugins array
+		if ( isset( $response_array['plugins'] ) && is_array( $response_array['plugins'] ) ) {
+			foreach ( $response_array['plugins'] as $key => $plugin ) {
+				$response_array['plugins'][$key] = wordpress_plugin_search_sanitize_plugin( $plugin );
+			}
+		}
+		
+		// Sanitize info
+		if ( isset( $response_array['info'] ) && is_array( $response_array['info'] ) ) {
+			foreach ( $response_array['info'] as $key => $value ) {
+				if ( is_string( $value ) ) {
+					$response_array['info'][$key] = sanitize_text_field( $value );
+				} elseif ( is_numeric( $value ) ) {
+					$response_array['info'][$key] = (int) $value;
+				}
+			}
+		}
+		
+		return $response_array;
+	}
+}
+
+/**
+ * Sanitize individual plugin data
+ */
+if ( ! function_exists( 'wordpress_plugin_search_sanitize_plugin' ) ) {
+	function wordpress_plugin_search_sanitize_plugin( $plugin ) {
+		$plugin_array = (array) $plugin;
+		$sanitized = array();
+		
+		// Safe text fields that need proper HTML entity decoding
+		$text_fields = array(
+			'slug', 'version', 'author', 'author_profile', 'requires', 'tested',
+			'requires_php', 'last_updated', 'added', 'homepage', 'download_link'
+		);
+		
+		foreach ( $text_fields as $field ) {
+			if ( isset( $plugin_array[ $field ] ) ) {
+				$sanitized[ $field ] = sanitize_text_field( $plugin_array[ $field ] );
+			}
+		}
+		
+		// Special handling for name and description - decode HTML entities properly
+		if ( isset( $plugin_array['name'] ) ) {
+			// Decode HTML entities first, then sanitize
+			$name = html_entity_decode( $plugin_array['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			$sanitized['name'] = sanitize_text_field( $name );
+		}
+		
+		if ( isset( $plugin_array['short_description'] ) ) {
+			// Decode HTML entities first, then strip tags and sanitize
+			$description = html_entity_decode( $plugin_array['short_description'], ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			$sanitized['short_description'] = sanitize_text_field( wp_strip_all_tags( $description ) );
+		}
+		
+		// Numeric fields
+		$numeric_fields = array( 'rating', 'num_ratings', 'active_installs', 'downloaded' );
+		foreach ( $numeric_fields as $field ) {
+			if ( isset( $plugin_array[ $field ] ) ) {
+				$sanitized[ $field ] = (int) $plugin_array[ $field ];
+			}
+		}
+		
+		// Icons with URL validation
+		if ( isset( $plugin_array['icons'] ) && is_array( $plugin_array['icons'] ) ) {
+			$sanitized['icons'] = array();
+			foreach ( $plugin_array['icons'] as $size => $url ) {
+				if ( filter_var( $url, FILTER_VALIDATE_URL ) ) {
+					$sanitized['icons'][ sanitize_text_field( $size ) ] = esc_url_raw( $url );
+				}
+			}
+		}
+		
+		return $sanitized;
+	}
+}]]></content>
+  </file>
+  <file path="src/block.json">
+    <description>This file contains metadata about the block including its name, title, category, icon, and other properties. The icon is a WordPress Dashicon name (e.g., "admin-post", "format-aside", "admin-page"). Do not use any icon that's not in the list under any circustamce. These are the only slugs available:
+	
+	menu menu-alt menu-alt2 menu-alt3 admin-site admin-site-alt admin-site-alt2 admin-site-alt3 dashboard admin-post admin-media admin-links admin-page admin-comments admin-appearance admin-plugins plugins-checked admin-users admin-tools admin-settings admin-network admin-home admin-generic admin-collapse filter admin-customizer admin-multisite welcome-write-blog welcome-add-page welcome-view-site welcome-widgets-menus welcome-comments welcome-learn-more format-aside format-image format-gallery format-video format-status format-quote format-chat format-audio camera camera-alt images-alt images-alt2 video-alt video-alt2 video-alt3 media-archive media-audio media-code media-default media-document media-interactive media-spreadsheet media-text media-video playlist-audio playlist-video controls-play controls-pause controls-forward controls-skipforward controls-back controls-skipback controls-repeat controls-volumeon controls-volumeoff image-crop image-rotate image-rotate-left image-rotate-right image-flip-vertical image-flip-horizontal image-filter undo redo database-add database database-export database-import database-remove database-view align-full-width align-pull-left align-pull-right align-wide block-default button cloud-saved cloud-upload columns cover-image ellipsis embed-audio embed-generic embed-photo embed-post embed-video exit heading html info-outline insert insert-after insert-before remove saved shortcode table-col-after table-col-before table-col-delete table-row-after table-row-before table-row-delete editor-bold editor-italic editor-ul editor-ol editor-ol-rtl editor-quote editor-alignleft editor-aligncenter editor-alignright editor-insertmore editor-spellcheck editor-expand editor-contract editor-kitchensink editor-underline editor-justify editor-textcolor editor-paste-word editor-paste-text editor-removeformatting editor-video editor-customchar editor-outdent editor-indent editor-help editor-strikethrough editor-unlink editor-rtl editor-ltr editor-break editor-code editor-paragraph editor-table align-left align-right align-center align-none lock unlock calendar calendar-alt visibility hidden post-status edit trash sticky external arrow-up arrow-down arrow-right arrow-left arrow-up-alt arrow-down-alt arrow-right-alt arrow-left-alt arrow-up-alt2 arrow-down-alt2 arrow-right-alt2 arrow-left-alt2 sort leftright randomize list-view excerpt-view grid-view move share share-alt share-alt2 rss email email-alt email-alt2 networking amazon facebook facebook-alt google instagram linkedin pinterest podio reddit spotify twitch twitter twitter-alt whatsapp xing youtube hammer art migrate performance universal-access universal-access-alt tickets nametag clipboard heart megaphone schedule tide rest-api code-standards buddicons-activity buddicons-bbpress-logo buddicons-buddypress-logo buddicons-community buddicons-forums buddicons-friends buddicons-groups buddicons-pm buddicons-replies buddicons-topics buddicons-tracking wordpress wordpress-alt pressthis update update-alt screenoptions info cart feedback cloud translation tag category archive tagcloud text bell yes yes-alt no no-alt plus plus-alt plus-alt2 minus dismiss marker star-filled star-half star-empty flag warning location location-alt vault shield shield-alt sos search slides text-page analytics chart-pie chart-bar chart-line chart-area groups businessman businesswoman businessperson id id-alt products awards forms testimonials portfolio book book-alt download upload backup clock lightbulb microphone desktop laptop tablet smartphone phone index-card carrot building store album palmtree tickets-alt money money-alt smiley thumbs-up thumbs-down layout paperclip color-picker edit-large edit-page airplane bank beer calculator car coffee drumstick food fullscreen-alt fullscreen-exit-alt games hourglass open-folder pdf pets printer privacy superhero superhero-alt</description>
+    <content><![CDATA[  {
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "telex/block-wordpress-plugin-search",
+	"version": "0.1.0",
+	"title": "WordPress.org Plugin Search",
+	"category": "widgets",
+	"icon": "admin-plugins",
+	"description": "A comprehensive plugin search interface with sorting and filtering for discovering hidden gems.",
+	"example": {
+		"attributes": {
+			"searchTerm": "security",
+			"resultsPerPage": 12,
+			"defaultSort": "rating",
+			"showFilters": true,
+			"align": "wide"
+		}
+	},
+	"attributes": {
+		"searchTerm": {
+			"type": "string",
+			"default": ""
+		},
+		"resultsPerPage": {
+			"type": "number",
+			"default": 12
+		},
+		"defaultSort": {
+			"type": "string",
+			"default": "popular"
+		},
+		"showFilters": {
+			"type": "boolean",
+			"default": true
+		},
+		"align": {
+			"type": "string",
+			"default": "wide"
+		}
+	},
+	"supports": {
+		"html": false,
+		"align": ["wide", "full"],
+		"spacing": {
+			"padding": true,
+			"margin": true
+		}
+	},
+	"textdomain": "wordpress-plugin-search-block-wp",
+	"editorScript": "file:./index.js",
+	"editorStyle": "file:./index.css",
+	"style": "file:./style-index.css",
+	"viewScript": "file:./view.js",
+	"render": "file:./render.php"
+}]]></content>
+  </file>
+  <file path="src/index.js">
+    <description>This file registers the block, specifies the edit and save functions, and loads the block's metadata</description>
+    <content><![CDATA[
+  /**
+ * Registers a new block provided a unique name and an object defining its behavior.
+ *
+ * @see https://developer.wordpress.org/block-editor/reference-guides/block-api/block-registration/
+ */
+import { registerBlockType } from '@wordpress/blocks';
+
+/**
+ * Lets webpack process CSS, SASS or SCSS files referenced in JavaScript files.
+ * All files containing `style` keyword are bundled together. The code used
+ * gets applied both to the front of your site and to the editor.
+ *
+ * @see https://www.npmjs.com/package/@wordpress/scripts#using-css
+ */
+import './style.scss';
+
+/**
+ * Internal dependencies
+ */
+import Edit from './edit';
+import metadata from './block.json';
+
+/**
+ * Every block starts by registering a new block type definition.
+ *
+ * @see https://developer.wordpress.org/block-editor/reference-guides/block-api/block-registration/
+ */
+registerBlockType( metadata.name, {
+	/**
+	 * @see ./edit.js
+	 */
+	edit: Edit,
+} );
+	]]></content>
+  </file>
+  <file path="src/edit.js">
+    <description>This file contains the edit function for the block which is responsible for rendering the block in the editor.</description>
+    <content><![CDATA[/**
+ * Retrieves the translation of text.
+ *
+ * @see https://developer.wordpress.org/block-editor/reference-guides/packages/packages-i18n/
+ */
+import { __ } from '@wordpress/i18n';
+
+/**
+ * React hook that is used to mark the block wrapper element.
+ * It provides all the necessary props like the class name.
+ *
+ * @see https://developer.wordpress.org/block-editor/reference-guides/packages/packages-block-editor/#useblockprops
+ */
+import { useBlockProps, InspectorControls } from '@wordpress/block-editor';
+import { 
+	PanelBody,
+	TextControl,
+	SelectControl,
+	ToggleControl,
+	Spinner,
+	Notice,
+	Modal,
+	Button
+} from '@wordpress/components';
+import { useState, useEffect } from '@wordpress/element';
+import { store as coreDataStore } from '@wordpress/core-data';
+import { useSelect } from '@wordpress/data';
+
+/**
+ * Lets webpack process CSS, SASS or SCSS files referenced in JavaScript files.
+ * Those files can contain any CSS code that gets applied to the editor.
+ *
+ * @see https://www.npmjs.com/package/@wordpress/scripts#using-css
+ */
+import './editor.scss';
+
+/**
+ * The edit function describes the structure of your block in the context of the
+ * editor. This represents what the editor will render when the block is used.
+ *
+ * @see https://developer.wordpress.org/block-editor/reference-guides/block-api/block-edit-save/#edit
+ *
+ * @return {Element} Element to render.
+ */
+export default function Edit({ attributes, setAttributes }) {
+	const {
+		searchTerm,
+		resultsPerPage,
+		defaultSort,
+		showFilters
+	} = attributes;
+
+	const [previewPlugins, setPreviewPlugins] = useState([]);
+	const [isLoading, setIsLoading] = useState(true);
+	const [error, setError] = useState(null);
+	const [modalOpen, setModalOpen] = useState(false);
+	const [modalPlugin, setModalPlugin] = useState(null);
+	const [modalImageIndex, setModalImageIndex] = useState(0);
+
+	// Use WordPress core data store for REST API calls
+	const { restNonce } = useSelect((select) => {
+		const { getCurrentUser } = select(coreDataStore);
+		const user = getCurrentUser();
+		return {
+			restNonce: user?.meta?.rest_nonce || window.wpApiSettings?.nonce
+		};
+	}, []);
+
+	// Load preview data
+	useEffect(() => {
+		const loadPreviewData = async () => {
+			try {
+				setIsLoading(true);
+				setError(null);
+				
+				// Load plugins for preview based on defaultSort
+				const pluginParams = new URLSearchParams({
+					action: 'query_plugins',
+					browse: defaultSort === 'newest' ? 'new' : defaultSort === 'updated' ? 'updated' : 'popular',
+					per_page: '6'
+				});
+				
+				const pluginResponse = await fetch(
+					`/wp-json/wordpress-plugin-search/v1/query?${pluginParams}`,
+					{
+						headers: {
+							'Content-Type': 'application/json',
+							...(restNonce && { 'X-WP-Nonce': restNonce })
+						}
+					}
+				);
+				
+				if (pluginResponse.ok) {
+					const pluginData = await pluginResponse.json();
+					if (pluginData.plugins && Array.isArray(pluginData.plugins)) {
+						const pluginsWithScreenshots = pluginData.plugins.map(plugin => {
+							if (plugin.slug) {
+								// Generate screenshot URLs for slider
+								plugin.screenshots = [];
+								for (let i = 1; i <= 5; i++) {
+									plugin.screenshots.push({
+										id: i,
+										url: `https://ps.w.org/${plugin.slug}/assets/screenshot-${i}.png`
+									});
+								}
+								plugin.primaryScreenshot = plugin.screenshots[0]?.url;
+							}
+							return plugin;
+						});
+						setPreviewPlugins(pluginsWithScreenshots);
+					}
+				} else {
+					throw new Error(`Failed to load plugins: ${pluginResponse.status}`);
+				}
+
+			} catch (loadError) {
+				console.error('Error loading preview data:', loadError);
+				setError(loadError.message);
+				setPreviewPlugins([]);
+			} finally {
+				setIsLoading(false);
+			}
+		};
+
+		loadPreviewData();
+	}, [restNonce, defaultSort]);
+
+	const resultsPerPageOptions = [
+		{ label: '12', value: 12 },
+		{ label: '24', value: 24 },
+		{ label: '48', value: 48 }
+	];
+
+	const sortOptions = [
+		{ label: __('Most Popular', 'wordpress-plugin-search-block-wp'), value: 'popular' },
+		{ label: __('Highest Rated', 'wordpress-plugin-search-block-wp'), value: 'rating' },
+		{ label: __('Most Installs', 'wordpress-plugin-search-block-wp'), value: 'installs' },
+		{ label: __('Recently Updated', 'wordpress-plugin-search-block-wp'), value: 'updated' },
+		{ label: __('Newest', 'wordpress-plugin-search-block-wp'), value: 'newest' }
+	];
+
+	// Open modal for screenshot viewing
+	const openModal = (plugin, imageIndex = 0) => {
+		if (!plugin.screenshots || plugin.screenshots.length === 0) {
+			return;
+		}
+		setModalPlugin(plugin);
+		setModalImageIndex(imageIndex);
+		setModalOpen(true);
+	};
+
+	// Close modal
+	const closeModal = () => {
+		setModalOpen(false);
+		setModalPlugin(null);
+		setModalImageIndex(0);
+	};
+
+	// Navigate modal images
+	const navigateModal = (direction) => {
+		if (!modalPlugin?.screenshots) return;
+		
+		let newIndex = modalImageIndex + direction;
+		if (newIndex < 0) {
+			newIndex = modalPlugin.screenshots.length - 1;
+		} else if (newIndex >= modalPlugin.screenshots.length) {
+			newIndex = 0;
+		}
+		setModalImageIndex(newIndex);
+	};
+
+	// Create screenshot slider for editor preview
+	const createScreenshotSlider = (plugin) => {
+		if (!plugin.screenshots || plugin.screenshots.length === 0) {
+			return (
+				<div className="wps-no-screenshot">
+					<span className="dashicons dashicons-format-image"></span>
+					<span>No screenshots available</span>
+				</div>
+			);
+		}
+
+		return (
+			<div className="wps-screenshot-slider">
+				<div 
+					className="wps-main-screenshot"
+					onClick={() => openModal(plugin, 0)}
+					style={{ cursor: 'zoom-in' }}
+				>
+					<img 
+						src={plugin.primaryScreenshot}
+						alt={`${plugin.name} screenshot`}
+						loading="lazy"
+						onError={(e) => {
+							e.target.style.display = 'none';
+							e.target.parentNode.innerHTML = '<div class="wps-no-screenshot"><span class="dashicons dashicons-format-image"></span><span>No screenshots available</span></div>';
+						}}
+					/>
+				</div>
+				<div className="wps-screenshot-thumbs">
+					{plugin.screenshots.slice(0, 5).map((screenshot, index) => (
+						<div 
+							key={screenshot.id}
+							className={`wps-screenshot-thumb ${index === 0 ? 'active' : ''}`}
+							onClick={() => openModal(plugin, index)}
+							style={{ cursor: 'pointer' }}
+						>
+							<img 
+								src={screenshot.url}
+								alt={`Screenshot ${screenshot.id}`}
+								loading="lazy"
+								onError={(e) => {
+									e.target.parentNode.style.display = 'none';
+								}}
+							/>
+						</div>
+					))}
+				</div>
+			</div>
+		);
+	};
+
+	const renderPluginItem = (plugin, index) => {
+		if (!plugin || !plugin.name) {
+			return null;
+		}
+		
+		const rating = plugin.rating ? Math.round(plugin.rating / 20) : 0;
+		const stars = '★'.repeat(rating) + '☆'.repeat(5 - rating);
+		
+		return (
+			<div key={plugin.slug || index} className="wps-plugin-item">
+				{createScreenshotSlider(plugin)}
+				
+				<div className="wps-plugin-info">
+					<h3 className="wps-plugin-title">
+						{plugin.name}
+					</h3>
+					
+					<div className="wps-plugin-meta">
+						{plugin.rating && (
+							<div className="wps-plugin-rating">
+								<span className="wps-rating-stars">{stars}</span>
+								<span className="wps-rating-text">
+									({plugin.num_ratings || 0})
+								</span>
+							</div>
+						)}
+						
+						{plugin.active_installs && (
+							<div className="wps-plugin-installs">
+								{plugin.active_installs.toLocaleString()}+ installs
+							</div>
+						)}
+					</div>
+				</div>
+			</div>
+		);
+	};
+
+	return (
+		<>
+			<InspectorControls>
+				<PanelBody title={__('Search Settings', 'wordpress-plugin-search-block-wp')} initialOpen={true}>
+					<TextControl
+						label={__('Default Search Term', 'wordpress-plugin-search-block-wp')}
+						value={searchTerm}
+						onChange={(value) => setAttributes({ searchTerm: value })}
+						help={__('Pre-populate the search field with this term', 'wordpress-plugin-search-block-wp')}
+					/>
+					
+					<SelectControl
+						label={__('Default Sort Order', 'wordpress-plugin-search-block-wp')}
+						value={defaultSort}
+						options={sortOptions}
+						onChange={(value) => setAttributes({ defaultSort: value })}
+						help={__('Choose how plugins are sorted by default', 'wordpress-plugin-search-block-wp')}
+					/>
+					
+					<SelectControl
+						label={__('Results Per Page', 'wordpress-plugin-search-block-wp')}
+						value={resultsPerPage}
+						options={resultsPerPageOptions}
+						onChange={(value) => setAttributes({ resultsPerPage: parseInt(value) })}
+					/>
+					
+					<ToggleControl
+						label={__('Show Filters', 'wordpress-plugin-search-block-wp')}
+						checked={showFilters}
+						onChange={(value) => setAttributes({ showFilters: value })}
+						help={__('Display advanced filtering options to users', 'wordpress-plugin-search-block-wp')}
+					/>
+				</PanelBody>
+			</InspectorControls>
+
+			<div {...useBlockProps({ className: 'wps-search-block' })}>
+				<div className="wps-search-block__header">
+					<h2 className="wps-search-block__title">
+						{__('WordPress Plugin Search', 'wordpress-plugin-search-block-wp')}
+					</h2>
+					<p className="wps-search-block__description">
+						{__('Search and discover plugins with advanced sorting and filtering.', 'wordpress-plugin-search-block-wp')}
+					</p>
+				</div>
+
+				<div className="wps-search-block__controls">
+					<div className="wps-search-input">
+						<input 
+							type="text" 
+							placeholder={__('Search plugins...', 'wordpress-plugin-search-block-wp')}
+							value={searchTerm}
+							disabled
+							readOnly
+						/>
+						<button type="button" disabled>
+							{__('Search', 'wordpress-plugin-search-block-wp')}
+						</button>
+					</div>
+
+					{showFilters && (
+						<div className="wps-filter-controls">
+							<div className="wps-filter-row">
+								<div className="wps-filter-item">
+									<label>{__('Sort by', 'wordpress-plugin-search-block-wp')}</label>
+									<select disabled>
+										<option>{sortOptions.find(opt => opt.value === defaultSort)?.label || 'Most Popular'}</option>
+									</select>
+								</div>
+								<div className="wps-filter-item">
+									<label>{__('Category', 'wordpress-plugin-search-block-wp')}</label>
+									<select disabled>
+										<option>{__('All Categories', 'wordpress-plugin-search-block-wp')}</option>
+									</select>
+								</div>
+								<div className="wps-filter-item">
+									<label>{__('Min Rating', 'wordpress-plugin-search-block-wp')}</label>
+									<select disabled>
+										<option>{__('Any Rating', 'wordpress-plugin-search-block-wp')}</option>
+									</select>
+								</div>
+								<div className="wps-filter-item">
+									<label>{__('Max Installs', 'wordpress-plugin-search-block-wp')}</label>
+									<select disabled>
+										<option>{__('Any Amount', 'wordpress-plugin-search-block-wp')}</option>
+									</select>
+								</div>
+							</div>
+						</div>
+					)}
+				</div>
+
+				<div className="wps-search-block__results">
+					{error && (
+						<Notice status="error" isDismissible={false}>
+							{__('Error loading plugins:', 'wordpress-plugin-search-block-wp')} {error}
+						</Notice>
+					)}
+					
+					{isLoading ? (
+						<div className="wps-loading">
+							<Spinner />
+							<p>{__('Loading plugins...', 'wordpress-plugin-search-block-wp')}</p>
+						</div>
+					) : (
+						<div className="wps-plugin-grid">
+							{previewPlugins.length > 0 ? (
+								previewPlugins.map(renderPluginItem)
+							) : (
+								<p className="wps-no-results">
+									{__('No plugins found. This is a preview in the editor.', 'wordpress-plugin-search-block-wp')}
+								</p>
+							)}
+						</div>
+					)}
+				</div>
+
+				<div className="wps-search-block__footer">
+					<p className="wps-editor-note">
+						{__('This is an editor preview. Full search, filtering, and screenshot viewing will work on the front end.', 'wordpress-plugin-search-block-wp')}
+					</p>
+				</div>
+			</div>
+
+			{modalOpen && modalPlugin && (
+				<Modal
+					title={modalPlugin.name}
+					onRequestClose={closeModal}
+					isFullScreen={false}
+					size="large"
+					className="wps-screenshot-modal"
+				>
+					<div style={{ padding: '1rem', textAlign: 'center' }}>
+						{modalPlugin.screenshots && modalPlugin.screenshots[modalImageIndex] && (
+							<img 
+								src={modalPlugin.screenshots[modalImageIndex].url}
+								alt={`${modalPlugin.name} screenshot ${modalImageIndex + 1}`}
+								style={{ 
+									maxWidth: '100%', 
+									maxHeight: '70vh',
+									height: 'auto',
+									borderRadius: '4px',
+									boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+								}}
+							/>
+						)}
+						
+						{modalPlugin.screenshots && modalPlugin.screenshots.length > 1 && (
+							<div style={{ 
+								display: 'flex', 
+								justifyContent: 'space-between', 
+								alignItems: 'center',
+								marginTop: '1rem',
+								padding: '0 1rem'
+							}}>
+								<Button 
+									isSecondary
+									onClick={() => navigateModal(-1)}
+									disabled={modalImageIndex === 0}
+								>
+									{__('Previous', 'wordpress-plugin-search-block-wp')}
+								</Button>
+								
+								<span style={{ color: '#666', fontSize: '0.9rem' }}>
+									{modalImageIndex + 1} / {modalPlugin.screenshots.length}
+								</span>
+								
+								<Button 
+									isSecondary
+									onClick={() => navigateModal(1)}
+									disabled={modalImageIndex === modalPlugin.screenshots.length - 1}
+								>
+									{__('Next', 'wordpress-plugin-search-block-wp')}
+								</Button>
+							</div>
+						)}
+					</div>
+				</Modal>
+			)}
+		</>
+	);
+}]]></content>
+  </file>
+  <file path="src/save.js">
+    <description>This file contains the save function for the block which is responsible for creating the static result of rendering the block on the client to display the saved result on the front end.</description>
+    <content><![CDATA[
+  ]]></content>
+  </file>
+  <file path="src/style.scss">
+    <description>This file contains styles for the block in the front end.</description>
+    <content><![CDATA[/**
+ * WordPress.org Plugin Search Block Styles - Dark Theme with Custom Lightbox
+ */
+
+.wp-block-telex-block-wordpress-plugin-search {
+	margin: 2rem 0;
+
+	.wps-search-block {
+		max-width: 100%;
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+		background-color: #1a1a1a;
+		color: #ffffff;
+		border-radius: 12px;
+		padding: 2rem;
+		border: 1px solid #333333;
+	}
+
+	// Header styling - dark theme
+	.wps-search-block__header {
+		margin-bottom: 2rem;
+		text-align: center;
+		padding: 1.5rem;
+		background: #2a2a2a;
+		border-radius: 8px;
+		border: 1px solid #444444;
+
+		.wps-search-block__title {
+			font-size: 1.5rem;
+			font-weight: 600;
+			margin: 0 0 0.5rem;
+			color: #ffffff;
+		}
+
+		.wps-search-block__description {
+			font-size: 1rem;
+			color: #e0e0e0;
+			margin: 0;
+			line-height: 1.5;
+		}
+	}
+
+	// Controls section - dark theme
+	.wps-search-block__controls {
+		margin-bottom: 2rem;
+		background: #2a2a2a;
+		border: 1px solid #444444;
+		border-radius: 8px;
+		padding: 1.5rem;
+	}
+
+	// Search input with WordPress button structure - dark theme
+	.wps-search-input {
+		display: flex;
+		gap: 0.5rem;
+		max-width: 600px;
+		margin: 0 auto 1rem;
+
+		input {
+			flex: 1;
+			padding: 12px 16px;
+			border: 1px solid #555555;
+			border-radius: 4px;
+			font-size: 16px;
+			background: #1a1a1a;
+			color: #ffffff;
+			transition: border-color 0.15s ease;
+
+			&::placeholder {
+				color: #999999;
+			}
+
+			&:focus {
+				outline: none;
+				border-color: #0073aa;
+				box-shadow: 0 0 0 0.2rem rgba(0, 115, 170, 0.25);
+			}
+
+			&:disabled {
+				background: #333333;
+				color: #777777;
+				cursor: not-allowed;
+			}
+		}
+
+		// WordPress button structure
+		.wp-block-button {
+			flex-shrink: 0;
+
+			.wp-block-button__link.wp-element-button {
+				padding: 12px 24px;
+				border-radius: 3px;
+				font-size: 14px;
+				line-height: 1.4;
+				font-weight: 400;
+				cursor: pointer;
+				text-decoration: none;
+				white-space: nowrap;
+				box-sizing: border-box;
+				transition: all 0.15s ease;
+				display: inline-block;
+
+				&:focus {
+					outline: 2px solid transparent;
+				}
+
+				&:active {
+					color: #fff;
+					transform: none;
+				}
+
+				&:disabled {
+					background: #666666 !important;
+					border-color: #666666 !important;
+					color: #999999 !important;
+					cursor: not-allowed;
+					box-shadow: none !important;
+					transform: none !important;
+				}
+			}
+		}
+	}
+
+	// Filter controls - dark theme
+	.wps-filter-controls {
+		margin-top: 1rem;
+		padding-top: 1rem;
+		border-top: 1px solid #444444;
+	}
+
+	.wps-filter-row {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: 1rem;
+		align-items: end;
+		margin-bottom: 1rem;
+	}
+
+	.wps-filter-toggles {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+		gap: 1rem;
+		margin-top: 1rem;
+		padding-top: 1rem;
+		border-top: 1px solid #444444;
+	}
+
+	.wps-filter-item {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+
+		label {
+			font-size: 0.875rem;
+			font-weight: 500;
+			color: #ffffff;
+			margin: 0;
+		}
+
+		// WordPress core select styling - FIXED arrow direction
+		select,
+		.components-select-control__input {
+			padding: 8px 40px 8px 12px;
+			border: 1px solid #8c8f94;
+			border-radius: 4px;
+			background: #1a1a1a;
+			color: #ffffff;
+			font-size: 14px;
+			cursor: pointer;
+			transition: all 0.15s ease;
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+			line-height: 1.5;
+			min-height: 36px;
+			box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+			appearance: none;
+			// FIXED: Corrected arrow direction (pointing down)
+			background-image: url('data:image/svg+xml;base64,PHN2ZyBmaWxsPSIjOGM4Zjk0IiBoZWlnaHQ9IjIwIiB2aWV3Qm94PSIwIDAgMjAgMjAiIHdpZHRoPSIyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJtNSA3IDUgNSA1LTV6Ii8+PC9zdmc+');
+			background-repeat: no-repeat;
+			background-position: right 12px center;
+
+			&:focus {
+				outline: none;
+				border-color: #0073aa;
+				box-shadow: 0 0 0 0.2rem rgba(0, 115, 170, 0.25);
+			}
+
+			&:disabled {
+				background: #333333;
+				color: #777777;
+				cursor: not-allowed;
+				border-color: #555555;
+			}
+
+			&:hover:not(:disabled) {
+				border-color: #0073aa;
+			}
+
+			option {
+				background: #1a1a1a;
+				color: #ffffff;
+				padding: 4px 8px;
+			}
+		}
+	}
+
+	// Toggle controls - dark theme with removed blue accents
+	.wps-toggle-item {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.75rem;
+		background: #1a1a1a;
+		border-radius: 6px;
+		border: 1px solid #444444;
+
+		input[type="checkbox"] {
+			width: 18px;
+			height: 18px;
+			accent-color: #666666; // Removed blue accent
+			cursor: pointer;
+		}
+
+		label {
+			font-size: 0.9rem;
+			font-weight: 500;
+			color: #ffffff;
+			margin: 0;
+			cursor: pointer;
+			flex: 1;
+		}
+
+		&:hover {
+			background: #2a2a2a;
+			border-color: #555555;
+		}
+	}
+
+	// Results info with WordPress button - dark theme with removed blue accent
+	.wps-results-info {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1.5rem;
+		padding: 1rem;
+		background: #2a2a2a;
+		border-radius: 6px;
+		border: 1px solid #444444;
+		font-size: 0.9rem;
+		color: #e0e0e0;
+
+		.wps-results-count {
+			font-weight: 500;
+			color: #ffffff;
+		}
+
+		// WordPress button structure for clear filters - removed blue accent
+		.wp-block-button {
+			.wp-block-button__link.wp-element-button {
+				background: transparent;
+				border: none;
+				color: #cccccc; // Changed from blue to neutral gray
+				cursor: pointer;
+				font-size: 13px;
+				line-height: 2.15384615;
+				padding: 0;
+				text-decoration: underline;
+				transition: color 0.15s ease;
+
+				&:hover {
+					color: #999999;
+				}
+
+				&:focus {
+					color: #777777;
+					outline: 1px dotted;
+				}
+			}
+		}
+	}
+
+	// Plugin grid - Fixed alignment with equal heights
+	.wps-plugin-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+		gap: 2rem;
+		margin-bottom: 2rem;
+		align-items: start;
+	}
+
+	.wps-plugin-item {
+		cursor: pointer;
+		transition: transform 0.2s ease;
+		position: relative;
+		background: none;
+		border: none;
+		border-radius: 0;
+		overflow: visible;
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+
+		&:hover {
+			transform: translateY(-2px);
+		}
+
+		&:focus {
+			outline: 2px solid #0073aa;
+			outline-offset: 2px;
+		}
+	}
+
+	// Hidden gems highlight
+	.wps-hidden-gem {
+		position: relative;
+
+		&::before {
+			content: "💎";
+			position: absolute;
+			top: 8px;
+			right: 8px;
+			background: #28a745;
+			color: white;
+			border-radius: 50%;
+			width: 24px;
+			height: 24px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 12px;
+			z-index: 3;
+		}
+	}
+
+	// Screenshot slider - fixed height to ensure alignment
+	.wps-screenshot-slider {
+		position: relative;
+		margin-bottom: 1rem;
+		flex: 0 0 auto;
+	}
+
+	.wps-main-screenshot {
+		width: 100%;
+		height: 240px;
+		background: #2a2a2a;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: 1px solid #444444;
+		border-radius: 8px;
+		position: relative;
+		overflow: hidden;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
+
+		img {
+			max-width: 100%;
+			max-height: 100%;
+			height: auto;
+			width: auto;
+			display: block;
+			transition: transform 0.3s ease;
+			object-fit: contain;
+			cursor: zoom-in;
+		}
+
+		&:hover img {
+			transform: scale(1.02);
+		}
+	}
+
+	// Thumbnail navigation - dark theme
+	.wps-screenshot-thumbs {
+		display: flex;
+		gap: 8px;
+		padding: 12px 0;
+		overflow-x: auto;
+		scrollbar-width: thin;
+		scrollbar-color: #444444 transparent;
+		justify-content: center;
+		max-width: 100%;
+
+		&::-webkit-scrollbar {
+			height: 4px;
+		}
+
+		&::-webkit-scrollbar-track {
+			background: transparent;
+		}
+
+		&::-webkit-scrollbar-thumb {
+			background: #444444;
+			border-radius: 2px;
+
+			&:hover {
+				background: #555555;
+			}
+		}
+	}
+
+	.wps-screenshot-thumb {
+		flex-shrink: 0;
+		width: 60px;
+		height: 45px;
+		border: 2px solid transparent;
+		border-radius: 6px;
+		overflow: hidden;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		position: relative;
+		background: #2a2a2a;
+
+		&:hover {
+			border-color: #0073aa;
+			transform: scale(1.05);
+			box-shadow: 0 2px 8px rgba(0, 115, 170, 0.3);
+		}
+
+		&.active {
+			border-color: #0073aa;
+			box-shadow: 0 0 0 1px #0073aa;
+			transform: scale(1.05);
+		}
+
+		img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+			display: block;
+		}
+	}
+
+	// No screenshot placeholder - fixed height to match screenshots
+	.wps-no-screenshot {
+		width: 100%;
+		height: 240px;
+		background: #2a2a2a;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		color: #999999;
+		font-size: 0.9rem;
+		text-align: center;
+		border: 2px dashed #444444;
+		border-radius: 8px;
+		gap: 0.75rem;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
+		padding: 0px !important;
+
+		.dashicons {
+			font-size: 3rem;
+			opacity: 0.4;
+			color: #444444;
+		}
+
+		span:last-child {
+			font-weight: 500;
+		}
+	}
+
+	// Plugin info - grow to fill remaining space
+	.wps-plugin-info {
+		text-align: center;
+		padding-top: 0.5rem;
+		flex: 1 1 auto;
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+	}
+
+	.wps-plugin-title {
+		font-size: 1.3rem;
+		font-weight: 600;
+		margin: 0 0 0.75rem;
+		color: #ffffff;
+		line-height: 1.3;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+
+		.wps-plugin-item:hover & {
+			color: #0073aa;
+		}
+	}
+
+	.wps-plugin-meta {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 1rem;
+		font-size: 0.9rem;
+		color: #e0e0e0;
+		flex-wrap: wrap;
+		margin-top: auto;
+	}
+
+	.wps-plugin-rating {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+
+		.wps-rating-stars {
+			color: #ffc107;
+			font-size: 1rem;
+		}
+
+		.wps-rating-text {
+			color: #e0e0e0;
+			font-size: 0.8rem;
+		}
+	}
+
+	.wps-plugin-installs {
+		font-weight: 500;
+		color: #28a745;
+	}
+
+	// Loading states - dark theme
+	.wps-loading, .wps-loading-initial {
+		text-align: center;
+		padding: 4rem 2rem;
+		color: #e0e0e0;
+
+		p {
+			margin: 1rem 0 0;
+			font-size: 1.1rem;
+			font-weight: 500;
+			color: #ffffff;
+		}
+	}
+
+	// No results - dark theme
+	.wps-no-results {
+		text-align: center;
+		padding: 4rem 2rem;
+		grid-column: 1 / -1;
+		background: #2a2a2a;
+		border-radius: 12px;
+		border: 2px dashed #444444;
+		color: #e0e0e0;
+		margin: 0;
+		font-size: 1.1rem;
+
+		.wps-search-suggestion {
+			margin-top: 1.5rem;
+			font-size: 1rem;
+			color: #ffffff;
+
+			ul {
+				list-style: none;
+				padding: 0;
+				margin: 1rem 0 0;
+
+				li {
+					padding: 0.25rem 0;
+					color: #ffffff;
+
+					&::before {
+						content: "• ";
+						color: #0073aa;
+					}
+				}
+			}
+
+			strong {
+				color: #0073aa;
+			}
+		}
+	}
+
+	// Error display with WordPress button - dark theme
+	.wps-error {
+		text-align: center;
+		padding: 3rem 2rem;
+		grid-column: 1 / -1;
+		background: #dc3545;
+		border: 2px solid #c82333;
+		border-radius: 12px;
+		color: white;
+
+		h3 {
+			margin: 0 0 1rem;
+			color: white;
+			font-size: 1.3rem;
+		}
+
+		p {
+			margin: 0 0 1.5rem;
+			font-size: 1.1rem;
+		}
+
+		// WordPress button structure for retry
+		.wp-block-button {
+			.wp-block-button__link.wp-element-button {
+				padding: 0 12px;
+				min-height: 32px;
+				border: 1px solid rgba(255, 255, 255, 0.3);
+				border-radius: 3px;
+				background: rgba(255, 255, 255, 0.1);
+				color: #fff;
+				font-size: 13px;
+				line-height: 2.15384615;
+				font-weight: 400;
+				cursor: pointer;
+				text-decoration: none;
+				white-space: nowrap;
+				box-sizing: border-box;
+				transition: all 0.15s ease;
+
+				&:hover {
+					background: rgba(255, 255, 255, 0.2);
+					border-color: rgba(255, 255, 255, 0.5);
+				}
+
+				&:focus {
+					border-color: rgba(255, 255, 255, 0.5);
+					box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
+					outline: 2px solid transparent;
+				}
+			}
+		}
+	}
+
+	// Load More button with WordPress classes - dark theme
+	.wps-load-more-container {
+		text-align: center;
+		margin-top: 2rem;
+		padding: 1rem;
+
+		.wps-load-more-spinner {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 0.5rem;
+			color: #e0e0e0;
+			font-size: 0.9rem;
+		}
+	}
+
+	// Pagination - dark theme
+	.wps-pagination {
+		margin-top: 3rem;
+	}
+
+	.wps-pagination-controls {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	// WordPress button structure for pagination
+	.wp-block-button {
+		.wp-block-button__link.wp-element-button {
+			&.wps-pagination-button {
+				padding: 0 12px;
+				min-height: 32px;
+				border: 1px solid #ddd;
+				border-radius: 3px;
+				background: #f7f7f7;
+				color: #555;
+				font-size: 13px;
+				line-height: 2.15384615;
+				font-weight: 400;
+				cursor: pointer;
+				text-decoration: none;
+				white-space: nowrap;
+				box-sizing: border-box;
+				transition: all 0.15s ease;
+
+				&:hover {
+					background: #fafafa;
+					border-color: #999;
+					color: #23282d;
+				}
+
+				&:focus {
+					border-color: #5b9dd9;
+					box-shadow: 0 0 0 1px #5b9dd9;
+					outline: 2px solid transparent;
+				}
+
+				&.active {
+					background: #0073aa;
+					border-color: #0073aa;
+					color: white;
+					cursor: default;
+
+					&:hover {
+						background: #0073aa;
+						border-color: #0073aa;
+					}
+				}
+			}
+		}
+	}
+
+	// Loading spinner - dark theme
+	.wps-spinner {
+		display: inline-block;
+		width: 2.5rem;
+		height: 2.5rem;
+		border: 3px solid #444444;
+		border-top: 3px solid #0073aa;
+		border-radius: 50%;
+		animation: wps-spin 1s linear infinite;
+		margin-bottom: 1rem;
+	}
+
+	@keyframes wps-spin {
+		0% { transform: rotate(0deg); }
+		100% { transform: rotate(360deg); }
+	}
+
+	// CUSTOM LIGHTBOX STYLES - Fixed close button positioning
+	.wps-lightbox {
+		position: fixed;
+		top: 0;
+		left: 0;
+		width: 100vw;
+		height: 100vh;
+		z-index: 999999;
+		display: none;
+		align-items: center;
+		justify-content: center;
+		padding: 2rem;
+		box-sizing: border-box;
+	}
+
+	.wps-lightbox-backdrop {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		background: rgba(0, 0, 0, 0.9);
+		cursor: pointer;
+	}
+
+	.wps-lightbox-container {
+		position: relative;
+		background: #ffffff;
+		border-radius: 8px;
+		max-width: 90vw;
+		max-height: 90vh;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+		z-index: 2;
+	}
+
+	.wps-lightbox-header {
+		padding: 1.5rem 2rem;
+		border-bottom: 1px solid #e0e0e0;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		background: #f8f9fa;
+		flex-shrink: 0;
+	}
+
+	.wps-lightbox-title {
+		margin: 0;
+		font-size: 1.25rem;
+		font-weight: 600;
+		color: #333333;
+		flex: 1;
+		margin-right: 1rem;
+	}
+
+	// FIXED: Close button with proper z-index and positioning
+	.wps-lightbox-close {
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		padding: 0.5rem;
+		border-radius: 4px;
+		color: #666666;
+		transition: all 0.2s ease;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 40px;
+		height: 40px;
+		font-size: 24px;
+		line-height: 1;
+		z-index: 1000; // Ensure it's always on top
+		position: relative;
+
+		&:hover {
+			background: #e9ecef;
+			color: #333333;
+		}
+
+		&:focus {
+			outline: 2px solid #0073aa;
+			outline-offset: 2px;
+			background: #e9ecef;
+		}
+	}
+
+	.wps-lightbox-content {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
+
+	.wps-lightbox-main {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		position: relative;
+		padding: 2rem;
+		background: #f8f9fa;
+		min-height: 400px;
+	}
+
+	.wps-lightbox-image {
+		max-width: 100%;
+		max-height: 100%;
+		height: auto;
+		width: auto;
+		object-fit: contain;
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+		border-radius: 4px;
+	}
+
+	.wps-lightbox-nav {
+		position: absolute;
+		top: 50%;
+		transform: translateY(-50%);
+		background: rgba(0, 0, 0, 0.6);
+		color: white;
+		border: none;
+		border-radius: 50%;
+		width: 50px;
+		height: 50px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		font-size: 20px;
+		z-index: 3;
+
+		&:hover {
+			background: rgba(0, 0, 0, 0.8);
+			transform: translateY(-50%) scale(1.1);
+		}
+
+		&:focus {
+			outline: 2px solid #0073aa;
+			outline-offset: 2px;
+		}
+
+		&:disabled {
+			opacity: 0.4;
+			cursor: not-allowed;
+
+			&:hover {
+				background: rgba(0, 0, 0, 0.6);
+				transform: translateY(-50%);
+			}
+		}
+	}
+
+	.wps-lightbox-prev {
+		left: 1rem;
+	}
+
+	.wps-lightbox-next {
+		right: 1rem;
+	}
+
+	.wps-lightbox-counter {
+		padding: 1rem 2rem;
+		border-top: 1px solid #e0e0e0;
+		background: #ffffff;
+		text-align: center;
+		font-size: 0.9rem;
+		color: #666666;
+		font-weight: 500;
+		flex-shrink: 0;
+	}
+
+	// No JavaScript fallback - dark theme
+	.wps-no-javascript {
+		text-align: center;
+		padding: 3rem 2rem;
+		background: #2a2a2a;
+		border-radius: 12px;
+		border: 2px solid #444444;
+		color: #ffffff;
+
+		h3 {
+			margin: 0 0 1rem;
+			color: #ffffff;
+			font-size: 1.3rem;
+		}
+
+		p {
+			margin: 0;
+			font-size: 1rem;
+			line-height: 1.5;
+
+			a {
+				color: #0073aa;
+				text-decoration: none;
+
+				&:hover {
+					text-decoration: underline;
+				}
+			}
+		}
+	}
+
+	// RESPONSIVE DESIGN
+	@media (max-width: 767px) {
+		.wps-plugin-grid {
+			grid-template-columns: 1fr;
+			gap: 2rem;
+		}
+
+		.wps-search-input {
+			flex-direction: column;
+
+			.wp-block-button {
+				width: 100%;
+
+				.wp-block-button__link.wp-element-button {
+					width: 100%;
+					text-align: center;
+				}
+			}
+		}
+
+		.wps-filter-row, .wps-filter-toggles {
+			grid-template-columns: 1fr;
+		}
+
+		.wps-results-info {
+			flex-direction: column;
+			gap: 0.5rem;
+			text-align: center;
+		}
+
+		.wps-main-screenshot, .wps-no-screenshot {
+			height: 200px;
+		}
+
+		// Mobile lightbox adjustments
+		.wps-lightbox-container {
+			max-width: 95vw;
+			max-height: 95vh;
+		}
+
+		.wps-lightbox-header {
+			padding: 1rem;
+		}
+
+		.wps-lightbox-title {
+			font-size: 1.1rem;
+		}
+
+		.wps-lightbox-main {
+			padding: 1rem;
+			min-height: 300px;
+		}
+
+		.wps-lightbox-nav {
+			width: 40px;
+			height: 40px;
+			font-size: 16px;
+		}
+
+		.wps-lightbox-prev {
+			left: 0.5rem;
+		}
+
+		.wps-lightbox-next {
+			right: 0.5rem;
+		}
+
+		.wps-lightbox-counter {
+			padding: 0.75rem 1rem;
+		}
+	}
+
+	// Tablet
+	@media (min-width: 768px) and (max-width: 1023px) {
+		.wps-plugin-grid {
+			grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+		}
+
+		.wps-filter-row, .wps-filter-toggles {
+			grid-template-columns: repeat(2, 1fr);
+		}
+
+		.wps-main-screenshot, .wps-no-screenshot {
+			height: 220px;
+		}
+	}
+
+	// Large screens
+	@media (min-width: 1400px) {
+		.wps-plugin-grid {
+			grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+		}
+
+		.wps-main-screenshot {
+			height: 260px;
+		}
+	}
+
+	// Reduced motion support
+	@media (prefers-reduced-motion: reduce) {
+		* {
+			transition: none !important;
+			animation: none !important;
+		}
+
+		.wps-plugin-item:hover {
+			transform: none;
+		}
+
+		.wps-main-screenshot:hover img {
+			transform: none;
+		}
+
+		.wps-lightbox-nav:hover {
+			transform: translateY(-50%);
+		}
+	}
+
+	// Focus states
+	.wps-screenshot-thumb:focus {
+		outline: 2px solid #0073aa;
+		outline-offset: 2px;
+	}
+
+	// Print styles
+	@media print {
+		.wps-search-block__controls,
+		.wps-pagination,
+		.wps-screenshot-thumbs,
+		.wps-lightbox {
+			display: none !important;
+		}
+
+		.wps-search-block {
+			background: white !important;
+			color: black !important;
+			border: 1px solid #ccc !important;
+		}
+	}
+}]]></content>
+  </file>
+  <file path="src/editor.scss">
+    <description>This file contains styles for the block in the editor.</description>
+    <content><![CDATA[/**
+ * Editor-specific styles for the WordPress.org Plugin Search Block
+ */
+
+.wp-block-telex-block-wordpress-plugin-search {
+	// Editor preview styling
+	.wps-search-block__header {
+		border-bottom: 2px dashed #ddd;
+		padding-bottom: 1rem;
+	}
+
+	.wps-editor-note {
+		background: #e8f4f8;
+		border: 1px solid #b8daff;
+		border-radius: 4px;
+		padding: 0.75rem;
+		color: #0c5460;
+	}
+
+	// Disabled input styling in editor
+	.wps-search-input input:disabled,
+	.wps-filter-controls select:disabled {
+		cursor: not-allowed;
+		opacity: 0.7;
+	}
+}
+
+// Inspector controls styling
+.wps-control-group {
+	margin-bottom: 1rem;
+
+	label {
+		display: block;
+		margin-bottom: 0.5rem;
+		font-weight: 500;
+		font-size: 11px;
+		line-height: 1.4;
+		text-transform: uppercase;
+		color: #1e1e1e;
+	}
+
+	.components-button-group {
+		display: flex;
+		width: 100%;
+
+		.components-button {
+			flex: 1;
+			justify-content: center;
+		}
+	}
+}
+
+// Block editor specific overrides
+.block-editor-block-list__block[data-type="telex/block-wordpress-plugin-search"] {
+	// Ensure proper spacing in editor
+	.wp-block-telex-block-wordpress-plugin-search {
+		min-height: 400px;
+	}
+}]]></content>
+  </file>
+  <file path="src/view.js">
+    <description>This file contains the view function for the block which is responsible for rendering interactive behaviors of the block on the front end. Ideally using the WordPress interactivity API.</description>
+    <content><![CDATA[	/**
+ * WordPress.org Plugin Search Block - Frontend JavaScript with Robust Lightbox
+ * Completely rewritten lightbox implementation for better frontend compatibility
+ */
+
+// Initialize when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+	const searchBlocks = document.querySelectorAll('.wp-block-telex-block-wordpress-plugin-search');
+	
+	searchBlocks.forEach(block => {
+		new PluginSearchInterface(block);
+	});
+});
+
+/**
+ * Plugin Search Interface with robust custom lightbox
+ */
+class PluginSearchInterface {
+	constructor(blockElement) {
+		this.block = blockElement;
+		this.cache = new Map();
+		this.currentRequest = null;
+		this.searchTimeout = null;
+		
+		// Get nonce from WordPress
+		this.restNonce = window.wpApiSettings?.nonce || '';
+		
+		// Get block attributes
+		this.attributes = this.getBlockAttributes();
+		
+		// Comprehensive state with filtering
+		this.state = {
+			searchTerm: this.sanitizeInput(this.attributes.searchTerm || ''),
+			currentPage: 1,
+			resultsPerPage: Math.max(1, Math.min(100, parseInt(this.attributes.resultsPerPage) || 12)),
+			sortBy: this.attributes.defaultSort || 'popular',
+			category: 'all',
+			minRating: 0,
+			maxInstalls: null,
+			updatedWithin: 'any',
+			onlyWithScreenshots: false, // Start unchecked by default
+			isLoading: false,
+			plugins: [],
+			allPlugins: [], // Store unfiltered results
+			totalResults: 0,
+			showFilters: this.attributes.showFilters !== false,
+			hasMorePages: false,
+			isLoadingMore: false,
+			screenshotCache: new Map() // Cache screenshot validation results
+		};
+		
+		// Plugin categories for filtering
+		this.categories = {
+			all: 'All Categories',
+			accessibility: 'Accessibility',
+			admin: 'Admin',
+			commerce: 'E-Commerce',
+			forms: 'Forms',
+			media: 'Media',
+			performance: 'Performance',
+			security: 'Security',
+			seo: 'SEO',
+			social: 'Social',
+			widgets: 'Widgets'
+		};
+		
+		// Lightbox state - simplified and more robust
+		this.lightbox = {
+			element: null,
+			isOpen: false,
+			currentPlugin: null,
+			currentIndex: 0,
+			screenshots: []
+		};
+		
+		this.init();
+	}
+	
+	/**
+	 * Create a temporary DOM element to decode HTML entities safely
+	 */
+	decodeHtmlEntities(str) {
+		if (typeof str !== 'string') {
+			return str;
+		}
+		
+		// Use DOMParser for safer HTML entity decoding
+		const parser = new DOMParser();
+		const doc = parser.parseFromString(`<!doctype html><body>${str}`, 'text/html');
+		return doc.body.textContent || '';
+	}
+	
+	/**
+	 * Sanitize input to prevent XSS
+	 */
+	sanitizeInput(input) {
+		if (typeof input !== 'string') {
+			return '';
+		}
+		return input.replace(/<[^>]*>/g, '').replace(/[<>"'&]/g, function(match) {
+			const escapeMap = {
+				'<': '&lt;',
+				'>': '&gt;',
+				'"': '&quot;',
+				"'": '&#x27;',
+				'&': '&amp;'
+			};
+			return escapeMap[match];
+		}).trim();
+	}
+	
+	/**
+	 * Sanitize and decode text for display
+	 */
+	sanitizeAndDecodeText(text) {
+		if (typeof text !== 'string') {
+			return '';
+		}
+		
+		// First decode HTML entities, then remove any HTML tags, then trim
+		let decoded = this.decodeHtmlEntities(text);
+		decoded = decoded.replace(/<[^>]*>/g, '');
+		return decoded.trim();
+	}
+	
+	/**
+	 * Get block attributes
+	 */
+	getBlockAttributes() {
+		const data = this.block.dataset;
+		return {
+			searchTerm: this.sanitizeInput(data.searchTerm || ''),
+			resultsPerPage: Math.max(1, Math.min(100, parseInt(data.resultsPerPage) || 12)),
+			defaultSort: data.defaultSort || 'popular',
+			showFilters: data.showFilters !== 'false'
+		};
+	}
+	
+	/**
+	 * Initialize the interface
+	 */
+	async init() {
+		try {
+			// Debug logging
+			console.log('Initializing plugin search interface');
+			
+			this.renderInterface();
+			this.createLightboxHTML();
+			this.bindEvents();
+			await this.performSearch();
+			
+			console.log('Plugin search interface initialized successfully');
+		} catch (error) {
+			console.error('Error initializing plugin search:', error);
+			this.renderError('Failed to initialize search interface.');
+		}
+	}
+	
+	/**
+	 * Create safe HTML element
+	 */
+	createElement(tag, attributes = {}, textContent = '') {
+		const element = document.createElement(tag);
+		
+		for (const [key, value] of Object.entries(attributes)) {
+			if (typeof value === 'string' || typeof value === 'number') {
+				element.setAttribute(key, value);
+			}
+		}
+		
+		if (textContent) {
+			element.textContent = textContent;
+		}
+		
+		return element;
+	}
+	
+	/**
+	 * Create WordPress button structure
+	 */
+	createButton(text, clickHandler, classes = '') {
+		const buttonContainer = this.createElement('div', { class: 'wp-block-button' });
+		const buttonLink = this.createElement('a', {
+			class: `wp-block-button__link wp-element-button ${classes}`.trim(),
+			tabindex: '0',
+			role: 'button'
+		}, text);
+		
+		// Add click handler
+		buttonLink.addEventListener('click', (e) => {
+			e.preventDefault();
+			clickHandler(e);
+		});
+		
+		// Add keyboard handler
+		buttonLink.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				clickHandler(e);
+			}
+		});
+		
+		buttonContainer.appendChild(buttonLink);
+		return { container: buttonContainer, link: buttonLink };
+	}
+	
+	/**
+	 * Create robust lightbox HTML structure
+	 */
+	createLightboxHTML() {
+		// Remove any existing lightbox
+		const existingLightbox = document.querySelector('.wps-lightbox');
+		if (existingLightbox) {
+			existingLightbox.remove();
+		}
+		
+		// Create lightbox container
+		const lightbox = this.createElement('div', {
+			class: 'wps-lightbox',
+			style: 'display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.9); z-index: 999999; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box;'
+		});
+		
+		// Create content container
+		const content = this.createElement('div', {
+			class: 'wps-lightbox-content',
+			style: 'position: relative; max-width: 90vw; max-height: 90vh; background: white; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;'
+		});
+		
+		// Header with title and close button
+		const header = this.createElement('div', {
+			class: 'wps-lightbox-header',
+			style: 'padding: 1rem 1.5rem; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; background: #f8f9fa;'
+		});
+		
+		const title = this.createElement('h3', {
+			class: 'wps-lightbox-title',
+			style: 'margin: 0; font-size: 1.2rem; color: #333; flex: 1;'
+		});
+		
+		// FIXED: Better close button positioning with higher z-index
+		const closeButton = this.createElement('button', {
+			class: 'wps-lightbox-close',
+			style: 'background: none; border: none; font-size: 24px; cursor: pointer; padding: 8px; border-radius: 4px; color: #666; z-index: 100; position: relative;',
+			'aria-label': 'Close lightbox'
+		}, '×');
+		
+		header.appendChild(title);
+		header.appendChild(closeButton);
+		
+		// Image container
+		const imageContainer = this.createElement('div', {
+			class: 'wps-lightbox-image-container',
+			style: 'flex: 1; display: flex; align-items: center; justify-content: center; position: relative; background: #f8f9fa; padding: 2rem; min-height: 400px;'
+		});
+		
+		const image = this.createElement('img', {
+			class: 'wps-lightbox-image',
+			style: 'max-width: 100%; max-height: 100%; object-fit: contain; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-radius: 4px;'
+		});
+		
+		// Navigation buttons
+		const prevButton = this.createElement('button', {
+			class: 'wps-lightbox-prev',
+			style: 'position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; width: 50px; height: 50px; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10;',
+			'aria-label': 'Previous image'
+		}, '‹');
+		
+		const nextButton = this.createElement('button', {
+			class: 'wps-lightbox-next',
+			style: 'position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; width: 50px; height: 50px; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10;',
+			'aria-label': 'Next image'
+		}, '›');
+		
+		imageContainer.appendChild(image);
+		imageContainer.appendChild(prevButton);
+		imageContainer.appendChild(nextButton);
+		
+		// Footer with counter
+		const footer = this.createElement('div', {
+			class: 'wps-lightbox-footer',
+			style: 'padding: 1rem; text-align: center; background: white; border-top: 1px solid #e0e0e0; font-size: 0.9rem; color: #666;'
+		});
+		
+		// Assemble lightbox
+		content.appendChild(header);
+		content.appendChild(imageContainer);
+		content.appendChild(footer);
+		lightbox.appendChild(content);
+		
+		// Add to body
+		document.body.appendChild(lightbox);
+		
+		// Store references
+		this.lightbox.element = lightbox;
+		this.lightbox.title = title;
+		this.lightbox.image = image;
+		this.lightbox.footer = footer;
+		this.lightbox.closeButton = closeButton;
+		this.lightbox.prevButton = prevButton;
+		this.lightbox.nextButton = nextButton;
+		
+		// Bind lightbox events
+		this.bindLightboxEvents();
+		
+		console.log('Lightbox HTML created successfully');
+	}
+	
+	/**
+	 * Bind lightbox events with robust error handling
+	 */
+	bindLightboxEvents() {
+		if (!this.lightbox.element) {
+			console.error('Lightbox element not found for event binding');
+			return;
+		}
+		
+		try {
+			// Close button
+			this.lightbox.closeButton.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				this.closeLightbox();
+			});
+			
+			// Navigation buttons
+			this.lightbox.prevButton.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				this.navigateLightbox(-1);
+			});
+			
+			this.lightbox.nextButton.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				this.navigateLightbox(1);
+			});
+			
+			// Click outside to close
+			this.lightbox.element.addEventListener('click', (e) => {
+				if (e.target === this.lightbox.element) {
+					this.closeLightbox();
+				}
+			});
+			
+			// Keyboard navigation
+			document.addEventListener('keydown', (e) => {
+				if (!this.lightbox.isOpen) return;
+				
+				switch (e.key) {
+					case 'Escape':
+						e.preventDefault();
+						this.closeLightbox();
+						break;
+					case 'ArrowLeft':
+						e.preventDefault();
+						this.navigateLightbox(-1);
+						break;
+					case 'ArrowRight':
+						e.preventDefault();
+						this.navigateLightbox(1);
+						break;
+				}
+			});
+			
+			console.log('Lightbox events bound successfully');
+		} catch (error) {
+			console.error('Error binding lightbox events:', error);
+		}
+	}
+	
+	/**
+	 * Open lightbox with plugin screenshots
+	 */
+	openLightbox(plugin, initialIndex = 0) {
+		console.log('Opening lightbox for plugin:', plugin?.name, 'index:', initialIndex);
+		
+		if (!this.lightbox.element) {
+			console.error('Lightbox element not found');
+			return;
+		}
+		
+		if (!plugin || !plugin.screenshots || plugin.screenshots.length === 0) {
+			console.warn('Plugin has no screenshots');
+			return;
+		}
+		
+		try {
+			this.lightbox.isOpen = true;
+			this.lightbox.currentPlugin = plugin;
+			this.lightbox.screenshots = plugin.screenshots;
+			this.lightbox.currentIndex = Math.max(0, Math.min(initialIndex, plugin.screenshots.length - 1));
+			
+			// Update content
+			const pluginName = this.sanitizeAndDecodeText(plugin.name || 'Plugin');
+			this.lightbox.title.textContent = pluginName;
+			
+			this.updateLightboxImage();
+			
+			// Show lightbox
+			this.lightbox.element.style.display = 'flex';
+			document.body.style.overflow = 'hidden';
+			
+			// Focus close button for accessibility
+			setTimeout(() => {
+				this.lightbox.closeButton?.focus();
+			}, 100);
+			
+			console.log('Lightbox opened successfully');
+		} catch (error) {
+			console.error('Error opening lightbox:', error);
+		}
+	}
+	
+	/**
+	 * Close lightbox
+	 */
+	closeLightbox() {
+		console.log('Closing lightbox');
+		
+		if (!this.lightbox.element || !this.lightbox.isOpen) {
+			return;
+		}
+		
+		try {
+			this.lightbox.isOpen = false;
+			this.lightbox.currentPlugin = null;
+			this.lightbox.screenshots = [];
+			
+			this.lightbox.element.style.display = 'none';
+			document.body.style.overflow = '';
+			
+			console.log('Lightbox closed successfully');
+		} catch (error) {
+			console.error('Error closing lightbox:', error);
+		}
+	}
+	
+	/**
+	 * Navigate lightbox images
+	 */
+	navigateLightbox(direction) {
+		if (!this.lightbox.isOpen || !this.lightbox.screenshots || this.lightbox.screenshots.length <= 1) {
+			return;
+		}
+		
+		this.lightbox.currentIndex += direction;
+		
+		// Wrap around
+		if (this.lightbox.currentIndex < 0) {
+			this.lightbox.currentIndex = this.lightbox.screenshots.length - 1;
+		} else if (this.lightbox.currentIndex >= this.lightbox.screenshots.length) {
+			this.lightbox.currentIndex = 0;
+		}
+		
+		this.updateLightboxImage();
+	}
+	
+	/**
+	 * Update lightbox image and counter
+	 */
+	updateLightboxImage() {
+		if (!this.lightbox.screenshots || this.lightbox.screenshots.length === 0) {
+			return;
+		}
+		
+		try {
+			const screenshot = this.lightbox.screenshots[this.lightbox.currentIndex];
+			const pluginName = this.sanitizeAndDecodeText(this.lightbox.currentPlugin?.name || 'Plugin');
+			
+			this.lightbox.image.src = screenshot.url;
+			this.lightbox.image.alt = `${pluginName} screenshot ${this.lightbox.currentIndex + 1}`;
+			
+			// Update counter
+			this.lightbox.footer.textContent = `${this.lightbox.currentIndex + 1} / ${this.lightbox.screenshots.length}`;
+			
+			// Show/hide navigation buttons
+			if (this.lightbox.screenshots.length <= 1) {
+				this.lightbox.prevButton.style.display = 'none';
+				this.lightbox.nextButton.style.display = 'none';
+			} else {
+				this.lightbox.prevButton.style.display = 'flex';
+				this.lightbox.nextButton.style.display = 'flex';
+			}
+		} catch (error) {
+			console.error('Error updating lightbox image:', error);
+		}
+	}
+	
+	/**
+	 * Render the complete interface with advanced controls
+	 */
+	renderInterface() {
+		this.block.innerHTML = '';
+		
+		const container = this.createElement('div', { class: 'wps-search-interface' });
+		
+		// Header
+		const header = this.createElement('div', { class: 'wps-search-block__header' });
+		header.appendChild(this.createElement('h2', { class: 'wps-search-block__title' }, 'WordPress Plugin Search'));
+		header.appendChild(this.createElement('p', { class: 'wps-search-block__description' }, 'Search and discover plugins with advanced sorting and filtering.'));
+		
+		// Controls
+		const controls = this.createElement('div', { class: 'wps-search-block__controls' });
+		
+		// Search input
+		const inputWrapper = this.createElement('div', { class: 'wps-search-input' });
+		const searchInput = this.createElement('input', {
+			type: 'search',
+			placeholder: 'Search plugins...',
+			value: this.state.searchTerm
+		});
+		
+		// Create search button with WordPress structure
+		const searchButtonContainer = this.createButton('Search', () => {
+			this.state.searchTerm = this.sanitizeInput(this.elements.searchInput.value);
+			this.state.currentPage = 1;
+			this.state.plugins = [];
+			this.performSearch();
+		});
+		
+		inputWrapper.appendChild(searchInput);
+		inputWrapper.appendChild(searchButtonContainer.container);
+		controls.appendChild(inputWrapper);
+		
+		// Advanced filters
+		if (this.state.showFilters) {
+			const filterControls = this.createElement('div', { class: 'wps-filter-controls' });
+			const filterRow = this.createElement('div', { class: 'wps-filter-row' });
+			
+			// Sort by - using WordPress core classes
+			const sortItem = this.createElement('div', { class: 'wps-filter-item' });
+			sortItem.appendChild(this.createElement('label', {}, 'Sort by'));
+			const sortSelect = this.createElement('select', { class: 'components-select-control__input' });
+			
+			const sortOptions = [
+				{ value: 'popular', label: 'Most Popular' },
+				{ value: 'rating', label: 'Highest Rated' },
+				{ value: 'installs', label: 'Most Installs' },
+				{ value: 'updated', label: 'Recently Updated' },
+				{ value: 'newest', label: 'Newest' }
+			];
+			
+			sortOptions.forEach(option => {
+				const optionElement = this.createElement('option', { value: option.value }, option.label);
+				if (option.value === this.state.sortBy) {
+					optionElement.selected = true;
+				}
+				sortSelect.appendChild(optionElement);
+			});
+			
+			sortItem.appendChild(sortSelect);
+			filterRow.appendChild(sortItem);
+			
+			// Category filter - using WordPress core classes
+			const categoryItem = this.createElement('div', { class: 'wps-filter-item' });
+			categoryItem.appendChild(this.createElement('label', {}, 'Category'));
+			const categorySelect = this.createElement('select', { class: 'components-select-control__input' });
+			
+			Object.entries(this.categories).forEach(([value, label]) => {
+				const optionElement = this.createElement('option', { value }, label);
+				if (value === this.state.category) {
+					optionElement.selected = true;
+				}
+				categorySelect.appendChild(optionElement);
+			});
+			
+			categoryItem.appendChild(categorySelect);
+			filterRow.appendChild(categoryItem);
+			
+			// Min rating filter - using WordPress core classes
+			const ratingItem = this.createElement('div', { class: 'wps-filter-item' });
+			ratingItem.appendChild(this.createElement('label', {}, 'Min Rating'));
+			const ratingSelect = this.createElement('select', { class: 'components-select-control__input' });
+			
+			const ratingOptions = [
+				{ value: 0, label: 'Any Rating' },
+				{ value: 80, label: '4+ Stars' },
+				{ value: 60, label: '3+ Stars' },
+				{ value: 40, label: '2+ Stars' }
+			];
+			
+			ratingOptions.forEach(option => {
+				const optionElement = this.createElement('option', { value: option.value }, option.label);
+				if (option.value === this.state.minRating) {
+					optionElement.selected = true;
+				}
+				ratingSelect.appendChild(optionElement);
+			});
+			
+			ratingItem.appendChild(ratingSelect);
+			filterRow.appendChild(ratingItem);
+			
+			// Max installs filter (for finding hidden gems) - using WordPress core classes
+			const installsItem = this.createElement('div', { class: 'wps-filter-item' });
+			installsItem.appendChild(this.createElement('label', {}, 'Max Installs'));
+			const installsSelect = this.createElement('select', { class: 'components-select-control__input' });
+			
+			const installsOptions = [
+				{ value: null, label: 'Any Amount' },
+				{ value: 1000, label: 'Under 1K (Hidden Gems)' },
+				{ value: 10000, label: 'Under 10K' },
+				{ value: 100000, label: 'Under 100K' },
+				{ value: 1000000, label: 'Under 1M' }
+			];
+			
+			installsOptions.forEach(option => {
+				const optionElement = this.createElement('option', { value: option.value || '' }, option.label);
+				if (option.value === this.state.maxInstalls) {
+					optionElement.selected = true;
+				}
+				installsSelect.appendChild(optionElement);
+			});
+			
+			installsItem.appendChild(installsSelect);
+			filterRow.appendChild(installsItem);
+			
+			filterControls.appendChild(filterRow);
+			
+			// Toggle filters row
+			const togglesRow = this.createElement('div', { class: 'wps-filter-toggles' });
+			
+			// Only with screenshots toggle - default UNCHECKED
+			const screenshotsToggle = this.createElement('div', { class: 'wps-toggle-item' });
+			const screenshotsCheckbox = this.createElement('input', { 
+				type: 'checkbox', 
+				id: 'wps-screenshots-only'
+			});
+			screenshotsCheckbox.checked = this.state.onlyWithScreenshots;
+			const screenshotsLabel = this.createElement('label', { 
+				for: 'wps-screenshots-only' 
+			}, 'Only show plugins with screenshots');
+			
+			screenshotsToggle.appendChild(screenshotsCheckbox);
+			screenshotsToggle.appendChild(screenshotsLabel);
+			togglesRow.appendChild(screenshotsToggle);
+			
+			filterControls.appendChild(togglesRow);
+			controls.appendChild(filterControls);
+			
+			// Store filter element references
+			this.filterElements = {
+				sortSelect,
+				categorySelect,
+				ratingSelect,
+				installsSelect,
+				screenshotsCheckbox
+			};
+		}
+		
+		// Results info
+		const resultsInfo = this.createElement('div', { class: 'wps-results-info', style: 'display: none;' });
+		const resultsCount = this.createElement('span', { class: 'wps-results-count' });
+		
+		// Create clear filters button with WordPress structure
+		const clearFiltersContainer = this.createButton('Clear Filters', () => this.clearAllFilters());
+		
+		resultsInfo.appendChild(resultsCount);
+		resultsInfo.appendChild(clearFiltersContainer.container);
+		
+		// Results
+		const results = this.createElement('div', { class: 'wps-search-block__results' });
+		const grid = this.createElement('div', { class: 'wps-plugin-grid' });
+		const loading = this.createElement('div', { class: 'wps-loading', style: 'display: none;' });
+		loading.appendChild(this.createElement('div', { class: 'wps-spinner' }));
+		loading.appendChild(this.createElement('p', {}, 'Searching plugins...'));
+		
+		results.appendChild(grid);
+		results.appendChild(loading);
+		
+		// Load More button with WordPress classes
+		const loadMoreContainer = this.createElement('div', { class: 'wps-load-more-container', style: 'display: none;' });
+		
+		// FIXED: Create load more button with WordPress structure
+		const loadMoreButtonContainer = this.createButton('Load More Plugins', () => this.loadMorePlugins());
+		
+		const loadMoreSpinner = this.createElement('div', { class: 'wps-load-more-spinner', style: 'display: none;' });
+		loadMoreSpinner.appendChild(this.createElement('div', { class: 'wps-spinner' }));
+		loadMoreSpinner.appendChild(this.createElement('span', {}, 'Loading more...'));
+		
+		loadMoreContainer.appendChild(loadMoreButtonContainer.container);
+		loadMoreContainer.appendChild(loadMoreSpinner);
+		
+		// Pagination (kept as fallback)
+		const pagination = this.createElement('div', { class: 'wps-pagination' });
+		
+		container.appendChild(header);
+		container.appendChild(controls);
+		container.appendChild(resultsInfo);
+		container.appendChild(results);
+		container.appendChild(loadMoreContainer);
+		container.appendChild(pagination);
+		
+		this.block.appendChild(container);
+		
+		// Store references
+		this.elements = {
+			searchInput,
+			searchButton: searchButtonContainer.link,
+			resultsInfo,
+			resultsCount,
+			clearFilters: clearFiltersContainer.link,
+			grid,
+			loading,
+			pagination,
+			loadMoreContainer,
+			loadMoreButton: loadMoreButtonContainer.link,
+			loadMoreSpinner
+		};
+	}
+	
+	/**
+	 * Bind events for all interactive elements
+	 */
+	bindEvents() {
+		// Search input
+		this.elements.searchInput.addEventListener('input', (e) => {
+			clearTimeout(this.searchTimeout);
+			this.searchTimeout = setTimeout(() => {
+				this.state.searchTerm = this.sanitizeInput(e.target.value);
+				this.state.currentPage = 1;
+				this.state.plugins = [];
+				this.performSearch();
+			}, 300);
+		});
+		
+		// Enter key
+		this.elements.searchInput.addEventListener('keypress', (e) => {
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				this.state.searchTerm = this.sanitizeInput(e.target.value);
+				this.state.currentPage = 1;
+				this.state.plugins = [];
+				this.performSearch();
+			}
+		});
+		
+		// Filter controls
+		if (this.filterElements) {
+			// Sort by
+			this.filterElements.sortSelect.addEventListener('change', (e) => {
+				this.state.sortBy = e.target.value;
+				this.state.currentPage = 1;
+				this.state.plugins = [];
+				this.performSearch();
+			});
+			
+			// Category
+			this.filterElements.categorySelect.addEventListener('change', (e) => {
+				this.state.category = e.target.value;
+				this.state.currentPage = 1;
+				this.state.plugins = [];
+				this.performSearch();
+			});
+			
+			// Min rating
+			this.filterElements.ratingSelect.addEventListener('change', (e) => {
+				this.state.minRating = parseInt(e.target.value);
+				this.state.currentPage = 1;
+				this.state.plugins = [];
+				this.performSearch();
+			});
+			
+			// Max installs
+			this.filterElements.installsSelect.addEventListener('change', (e) => {
+				this.state.maxInstalls = e.target.value ? parseInt(e.target.value) : null;
+				this.state.currentPage = 1;
+				this.state.plugins = [];
+				this.performSearch();
+			});
+			
+			// Screenshots only toggle - FIXED event handling
+			this.filterElements.screenshotsCheckbox.addEventListener('change', async (e) => {
+				this.state.onlyWithScreenshots = e.target.checked;
+				
+				// If toggling ON, apply filter to current results immediately
+				if (this.state.onlyWithScreenshots && this.state.plugins.length > 0) {
+					this.setLoading(true);
+					await this.applyScreenshotFilter();
+					this.renderResults();
+					this.updateResultsInfo();
+					this.setLoading(false);
+				} else if (!this.state.onlyWithScreenshots) {
+					// If toggling OFF, refresh search to show all plugins
+					this.state.currentPage = 1;
+					this.state.plugins = [];
+					this.performSearch();
+				}
+			});
+		}
+	}
+	
+	/**
+	 * Load more plugins with proper screenshot filtering
+	 */
+	async loadMorePlugins() {
+		if (!this.state.hasMorePages || this.state.isLoadingMore) {
+			return;
+		}
+		
+		this.state.currentPage++;
+		this.state.isLoadingMore = true;
+		
+		// Show load more spinner
+		this.elements.loadMoreButton.parentNode.style.display = 'none';
+		this.elements.loadMoreSpinner.style.display = 'flex';
+		
+		try {
+			// FIXED: Load plugins with proper screenshot filtering
+			await this.performSearch(true);
+		} catch (error) {
+			console.error('Error loading more plugins:', error);
+			// Show error and re-enable button
+			this.elements.loadMoreSpinner.style.display = 'none';
+			this.elements.loadMoreButton.parentNode.style.display = 'inline-block';
+			this.elements.loadMoreButton.textContent = 'Try Loading More';
+		} finally {
+			this.state.isLoadingMore = false;
+		}
+	}
+	
+	/**
+	 * Clear all filters
+	 */
+	clearAllFilters() {
+		this.state.searchTerm = '';
+		this.state.sortBy = this.attributes.defaultSort || 'popular';
+		this.state.category = 'all';
+		this.state.minRating = 0;
+		this.state.maxInstalls = null;
+		this.state.onlyWithScreenshots = false;
+		this.state.currentPage = 1;
+		this.state.plugins = [];
+		
+		// Update UI
+		this.elements.searchInput.value = '';
+		if (this.filterElements) {
+			this.filterElements.sortSelect.value = this.state.sortBy;
+			this.filterElements.categorySelect.value = this.state.category;
+			this.filterElements.ratingSelect.value = this.state.minRating;
+			this.filterElements.installsSelect.value = '';
+			this.filterElements.screenshotsCheckbox.checked = this.state.onlyWithScreenshots;
+		}
+		
+		this.performSearch();
+	}
+	
+	/**
+	 * Perform search with advanced filtering and proper screenshot handling
+	 */
+	async performSearch(appendMode = false) {
+		if (this.currentRequest) {
+			this.currentRequest.abort();
+		}
+		
+		if (!appendMode) {
+			this.setLoading(true);
+		}
+		
+		// Build search parameters
+		const params = {
+			action: 'query_plugins',
+			// FIXED: Load more plugins when screenshot filter is active
+			per_page: this.state.onlyWithScreenshots ? Math.min(100, this.state.resultsPerPage * 3).toString() : this.state.resultsPerPage.toString(),
+			page: this.state.currentPage.toString()
+		};
+		
+		// Add search term
+		if (this.state.searchTerm) {
+			params.search = this.state.searchTerm;
+		}
+		
+		// Handle sorting
+		if (this.state.sortBy === 'newest') {
+			params.browse = 'new';
+		} else if (this.state.sortBy === 'updated') {
+			params.browse = 'updated';
+		} else {
+			params.browse = 'popular';
+		}
+		
+		// Add category search
+		if (this.state.category !== 'all') {
+			// Combine category with existing search
+			const categoryTerm = this.state.category;
+			if (this.state.searchTerm) {
+				params.search = `${this.state.searchTerm} ${categoryTerm}`;
+			} else {
+				params.search = categoryTerm;
+			}
+		}
+		
+		try {
+			this.currentRequest = new AbortController();
+			
+			const url = new URL('/wp-json/wordpress-plugin-search/v1/query', window.location.origin);
+			Object.entries(params).forEach(([key, value]) => {
+				url.searchParams.set(key, value);
+			});
+			
+			const response = await fetch(url.toString(), {
+				headers: {
+					'Content-Type': 'application/json',
+					...(this.restNonce && { 'X-WP-Nonce': this.restNonce })
+				},
+				signal: this.currentRequest.signal,
+				credentials: 'same-origin'
+			});
+			
+			if (!response.ok) {
+				throw new Error(`HTTP ${response.status}`);
+			}
+			
+			const data = await response.json();
+			
+			let newPlugins = Array.isArray(data.plugins) ? data.plugins : [];
+			this.state.totalResults = parseInt(data.info?.results) || 0;
+			
+			// Check if there are more pages
+			const totalPages = Math.ceil(this.state.totalResults / this.state.resultsPerPage);
+			this.state.hasMorePages = this.state.currentPage < totalPages;
+			
+			// Add screenshots for all plugins
+			this.addScreenshotUrls(newPlugins);
+			
+			// Apply client-side filtering for advanced options
+			newPlugins = this.applyClientFilters(newPlugins);
+			
+			// FIXED: Apply screenshot filtering BEFORE appending
+			if (this.state.onlyWithScreenshots) {
+				newPlugins = await this.filterPluginsWithScreenshots(newPlugins);
+			}
+			
+			// Append or replace plugins
+			if (appendMode && this.state.plugins.length > 0) {
+				// Append new plugins, avoiding duplicates
+				const existingSlugs = new Set(this.state.plugins.map(p => p.slug));
+				const uniqueNewPlugins = newPlugins.filter(p => !existingSlugs.has(p.slug));
+				this.state.plugins = [...this.state.plugins, ...uniqueNewPlugins];
+			} else {
+				// Replace plugins for new search
+				this.state.plugins = newPlugins;
+			}
+			
+			this.renderResults(appendMode);
+			this.updateLoadMoreButton();
+			this.updateResultsInfo();
+			
+		} catch (error) {
+			if (error.name !== 'AbortError') {
+				console.error('Search error:', error);
+				if (!appendMode) {
+					this.renderError('Failed to search plugins.');
+				}
+			}
+		} finally {
+			if (!appendMode) {
+				this.setLoading(false);
+			}
+			this.currentRequest = null;
+			
+			// Hide load more spinner
+			this.elements.loadMoreSpinner.style.display = 'none';
+		}
+	}
+	
+	/**
+	 * Apply client-side filters for advanced options
+	 */
+	applyClientFilters(plugins) {
+		let filteredPlugins = [...plugins];
+		
+		// Filter by minimum rating
+		if (this.state.minRating > 0) {
+			filteredPlugins = filteredPlugins.filter(plugin => {
+				return plugin.rating && plugin.rating >= this.state.minRating;
+			});
+		}
+		
+		// Filter by maximum installs (for hidden gems)
+		if (this.state.maxInstalls) {
+			filteredPlugins = filteredPlugins.filter(plugin => {
+				return !plugin.active_installs || plugin.active_installs <= this.state.maxInstalls;
+			});
+		}
+		
+		// Apply custom sorting
+		if (this.state.sortBy === 'rating') {
+			filteredPlugins.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+		} else if (this.state.sortBy === 'installs') {
+			filteredPlugins.sort((a, b) => (b.active_installs || 0) - (a.active_installs || 0));
+		}
+		
+		return filteredPlugins;
+	}
+	
+	/**
+	 * Add screenshot URLs to plugins
+	 */
+	addScreenshotUrls(plugins) {
+		for (const plugin of plugins) {
+			if (plugin.slug) {
+				// Get all available screenshots (1-10)
+				plugin.screenshots = [];
+				for (let i = 1; i <= 10; i++) {
+					plugin.screenshots.push({
+						id: i,
+						url: `https://ps.w.org/${plugin.slug}/assets/screenshot-${i}.png`
+					});
+				}
+				plugin.primaryScreenshot = plugin.screenshots[0]?.url;
+				plugin.currentScreenshotIndex = 0;
+			}
+		}
+	}
+	
+	/**
+	 * FIXED: Check if plugin has screenshots with caching
+	 */
+	async pluginHasScreenshots(plugin) {
+		if (!plugin.slug) return false;
+		
+		// Check cache first
+		if (this.state.screenshotCache.has(plugin.slug)) {
+			return this.state.screenshotCache.get(plugin.slug);
+		}
+		
+		return new Promise((resolve) => {
+			const img = new Image();
+			const timeout = setTimeout(() => {
+				img.onload = null;
+				img.onerror = null;
+				this.state.screenshotCache.set(plugin.slug, false);
+				resolve(false);
+			}, 2000); // Increased timeout
+			
+			img.onload = () => {
+				clearTimeout(timeout);
+				this.state.screenshotCache.set(plugin.slug, true);
+				resolve(true);
+			};
+			
+			img.onerror = () => {
+				clearTimeout(timeout);
+				this.state.screenshotCache.set(plugin.slug, false);
+				resolve(false);
+			};
+			
+			img.src = `https://ps.w.org/${plugin.slug}/assets/screenshot-1.png`;
+		});
+	}
+	
+	/**
+	 * FIXED: Filter plugins with screenshots - improved version
+	 */
+	async filterPluginsWithScreenshots(plugins) {
+		if (!plugins || plugins.length === 0) {
+			return [];
+		}
+		
+		const pluginsWithScreenshots = [];
+		
+		// Process plugins in smaller batches to avoid overwhelming the browser
+		const batchSize = 3;
+		const batches = [];
+		
+		for (let i = 0; i < plugins.length; i += batchSize) {
+			batches.push(plugins.slice(i, i + batchSize));
+		}
+		
+		for (const batch of batches) {
+			const batchPromises = batch.map(async (plugin) => {
+				if (plugin.slug) {
+					const hasScreenshots = await this.pluginHasScreenshots(plugin);
+					if (hasScreenshots) {
+						return plugin;
+					}
+				}
+				return null;
+			});
+			
+			const batchResults = await Promise.allSettled(batchPromises);
+			
+			batchResults.forEach(result => {
+				if (result.status === 'fulfilled' && result.value) {
+					pluginsWithScreenshots.push(result.value);
+				}
+			});
+			
+			// Small delay between batches to prevent rate limiting
+			if (batches.indexOf(batch) < batches.length - 1) {
+				await new Promise(resolve => setTimeout(resolve, 150));
+			}
+		}
+		
+		console.log(`Filtered ${plugins.length} plugins down to ${pluginsWithScreenshots.length} with screenshots`);
+		return pluginsWithScreenshots;
+	}
+	
+	/**
+	 * FIXED: Apply screenshot filter to current plugins
+	 */
+	async applyScreenshotFilter() {
+		if (!this.state.onlyWithScreenshots || this.state.plugins.length === 0) {
+			return;
+		}
+		
+		this.state.plugins = await this.filterPluginsWithScreenshots(this.state.plugins);
+	}
+	
+	/**
+	 * Set loading state
+	 */
+	setLoading(loading) {
+		this.state.isLoading = loading;
+		
+		if (loading) {
+			this.elements.loading.style.display = 'block';
+			this.elements.grid.style.opacity = '0.6';
+		} else {
+			this.elements.loading.style.display = 'none';
+			this.elements.grid.style.opacity = '1';
+		}
+	}
+	
+	/**
+	 * Update load more button visibility and state
+	 */
+	updateLoadMoreButton() {
+		// FIXED: Better logic for load more with screenshot filtering
+		const shouldShowLoadMore = this.state.hasMorePages && this.state.plugins.length > 0;
+			
+		if (shouldShowLoadMore) {
+			this.elements.loadMoreContainer.style.display = 'block';
+			this.elements.loadMoreButton.parentNode.style.display = 'inline-block';
+			this.elements.loadMoreButton.textContent = 'Load More Plugins';
+			this.elements.loadMoreButton.disabled = false;
+		} else {
+			this.elements.loadMoreContainer.style.display = 'none';
+		}
+	}
+	
+	/**
+	 * Update results info display
+	 */
+	updateResultsInfo() {
+		if (this.state.plugins.length > 0) {
+			this.elements.resultsInfo.style.display = 'flex';
+			
+			let countText = `Showing ${this.state.plugins.length.toLocaleString()} plugin${this.state.plugins.length !== 1 ? 's' : ''}`;
+			
+			// FIXED: Better messaging for screenshot filter
+			if (this.state.onlyWithScreenshots) {
+				countText += ' with screenshots';
+			}
+			
+			if (this.state.hasMorePages && !this.state.onlyWithScreenshots) {
+				countText += ` (${this.state.totalResults.toLocaleString()} total available)`;
+			}
+			
+			this.elements.resultsCount.textContent = countText;
+		} else {
+			this.elements.resultsInfo.style.display = 'none';
+		}
+	}
+	
+	/**
+	 * Determine if a plugin is a "hidden gem"
+	 */
+	isHiddenGem(plugin) {
+		// Criteria for hidden gems: good rating but low install count
+		const hasGoodRating = plugin.rating && plugin.rating >= 80;
+		const hasLowInstalls = !plugin.active_installs || plugin.active_installs < 10000;
+		const hasRecentUpdate = plugin.last_updated && new Date(plugin.last_updated) > new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+		
+		return hasGoodRating && hasLowInstalls && hasRecentUpdate;
+	}
+	
+	/**
+	 * Create enhanced screenshot slider with robust event handling
+	 */
+	createScreenshotSlider(plugin, pluginIndex) {
+		const sliderContainer = this.createElement('div', { class: 'wps-screenshot-slider' });
+		
+		// If no screenshots available, show placeholder immediately
+		if (!plugin.screenshots || plugin.screenshots.length === 0) {
+			const placeholder = this.createElement('div', { class: 'wps-no-screenshot' });
+			placeholder.innerHTML = '<span class="dashicons dashicons-format-image"></span><span>No screenshots available</span>';
+			sliderContainer.appendChild(placeholder);
+			return sliderContainer;
+		}
+		
+		// Build the slider with robust event handling
+		this.buildScreenshotSlider(sliderContainer, plugin, plugin.screenshots, pluginIndex);
+		
+		return sliderContainer;
+	}
+	
+	/**
+	 * Build the screenshot slider interface with robust lightbox integration
+	 */
+	buildScreenshotSlider(container, plugin, screenshots, pluginIndex) {
+		const currentIndex = plugin.currentScreenshotIndex || 0;
+		
+		// Main image container
+		const mainImage = this.createElement('div', { class: 'wps-main-screenshot' });
+		const img = this.createElement('img', {
+			src: screenshots[currentIndex]?.url || screenshots[0]?.url,
+			alt: `${this.sanitizeAndDecodeText(plugin.name)} screenshot`,
+			loading: 'lazy'
+		});
+		
+		// Handle image load errors
+		img.addEventListener('error', (e) => {
+			// Show placeholder if image fails to load
+			mainImage.innerHTML = '<div class="wps-no-screenshot"><span class="dashicons dashicons-format-image"></span><span>No screenshots available</span></div>';
+		});
+		
+		// ROBUST: Click to open lightbox with comprehensive error handling
+		img.addEventListener('click', (e) => {
+			e.stopPropagation();
+			e.preventDefault();
+			console.log('Screenshot clicked, opening lightbox for:', plugin.name);
+			
+			try {
+				this.openLightbox(plugin, plugin.currentScreenshotIndex || 0);
+			} catch (error) {
+				console.error('Error opening lightbox from click:', error);
+			}
+		});
+		
+		mainImage.appendChild(img);
+		container.appendChild(mainImage);
+		
+		// Thumbnail navigation (show max 5 thumbs)
+		if (screenshots.length > 1) {
+			const thumbs = this.createElement('div', { class: 'wps-screenshot-thumbs' });
+			
+			screenshots.slice(0, 5).forEach((screenshot, index) => {
+				const thumb = this.createElement('div', {
+					class: `wps-screenshot-thumb ${index === currentIndex ? 'active' : ''}`,
+					'data-index': index,
+					tabindex: '0',
+					'aria-label': `Screenshot ${index + 1}`
+				});
+				
+				const thumbImg = this.createElement('img', {
+					src: screenshot.url,
+					alt: `Screenshot ${screenshot.id}`,
+					loading: 'lazy'
+				});
+				
+				// Handle thumb image errors
+				thumbImg.addEventListener('error', (e) => {
+					e.target.parentNode.style.display = 'none';
+				});
+				
+				// ROBUST: Click to change main image and open lightbox
+				thumb.addEventListener('click', (e) => {
+					e.stopPropagation();
+					e.preventDefault();
+					console.log('Thumbnail clicked, opening lightbox at index:', index);
+					
+					try {
+						this.goToScreenshot(plugin, screenshots, img, index);
+						this.updateThumbnailHighlight(thumbs, index);
+						this.openLightbox(plugin, index);
+					} catch (error) {
+						console.error('Error opening lightbox from thumbnail:', error);
+					}
+				});
+				
+				// Keyboard navigation for thumbnails
+				thumb.addEventListener('keydown', (e) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.preventDefault();
+						e.stopPropagation();
+						
+						try {
+							this.goToScreenshot(plugin, screenshots, img, index);
+							this.updateThumbnailHighlight(thumbs, index);
+							this.openLightbox(plugin, index);
+						} catch (error) {
+							console.error('Error opening lightbox from keyboard:', error);
+						}
+					}
+				});
+				
+				thumb.appendChild(thumbImg);
+				thumbs.appendChild(thumb);
+			});
+			
+			container.appendChild(thumbs);
+		}
+	}
+	
+	/**
+	 * Go to specific screenshot
+	 */
+	goToScreenshot(plugin, screenshots, imgElement, index) {
+		if (index < 0 || index >= screenshots.length) return;
+		
+		plugin.currentScreenshotIndex = index;
+		
+		// Update main image
+		imgElement.src = screenshots[index].url;
+		imgElement.alt = `${this.sanitizeAndDecodeText(plugin.name)} screenshot ${index + 1}`;
+	}
+	
+	/**
+	 * Update thumbnail highlight
+	 */
+	updateThumbnailHighlight(thumbsContainer, activeIndex) {
+		const thumbs = thumbsContainer.querySelectorAll('.wps-screenshot-thumb');
+		thumbs.forEach((thumb, index) => {
+			if (index === activeIndex) {
+				thumb.classList.add('active');
+			} else {
+				thumb.classList.remove('active');
+			}
+		});
+	}
+	
+	/**
+	 * Render results
+	 */
+	renderResults(appendMode = false) {
+		if (!appendMode) {
+			this.elements.grid.innerHTML = '';
+		}
+		
+		if (this.state.plugins.length === 0 && !appendMode) {
+			const noResults = this.createElement('div', { class: 'wps-no-results' });
+			
+			if (this.state.searchTerm || this.hasActiveFilters()) {
+				noResults.innerHTML = `
+					<p>No plugins found matching your criteria.</p>
+					<div class="wps-search-suggestion">
+						<p>Try:</p>
+						<ul>
+							<li>Using different keywords</li>
+							<li>Reducing filter restrictions</li>
+							<li>Searching for <strong>"performance"</strong>, <strong>"security"</strong>, or <strong>"forms"</strong></li>
+						</ul>
+					</div>
+				`;
+			} else {
+				noResults.textContent = 'No plugins found.';
+			}
+			
+			this.elements.grid.appendChild(noResults);
+			return;
+		}
+		
+		// Get plugins to render
+		const pluginsToRender = appendMode ? 
+			this.state.plugins.slice(-this.state.resultsPerPage) : 
+			this.state.plugins;
+		
+		pluginsToRender.forEach((plugin, index) => {
+			const actualIndex = appendMode ? 
+				this.state.plugins.length - this.state.resultsPerPage + index :
+				index;
+			const item = this.renderPluginItem(plugin, actualIndex);
+			if (item) {
+				this.elements.grid.appendChild(item);
+			}
+		});
+	}
+	
+	/**
+	 * Check if any filters are active
+	 */
+	hasActiveFilters() {
+		return this.state.searchTerm ||
+			   this.state.category !== 'all' ||
+			   this.state.minRating > 0 ||
+			   this.state.maxInstalls !== null ||
+			   this.state.onlyWithScreenshots ||
+			   this.state.sortBy !== (this.attributes.defaultSort || 'popular');
+	}
+	
+	/**
+	 * Render plugin item with title and description ABOVE images
+	 */
+	renderPluginItem(plugin, index) {
+		if (!plugin || !plugin.name) {
+			return null;
+		}
+		
+		const isGem = this.isHiddenGem(plugin);
+		
+		const item = this.createElement('div', { 
+			class: `wps-plugin-item ${isGem ? 'wps-hidden-gem' : ''}`,
+			tabindex: '0'
+		});
+		
+		// MOVED: Plugin info section now comes FIRST
+		const info = this.createElement('div', { class: 'wps-plugin-info' });
+		
+		// Title - properly decode HTML entities
+		const title = this.createElement('h3', { class: 'wps-plugin-title' }, this.sanitizeAndDecodeText(plugin.name));
+		info.appendChild(title);
+		
+		// Short description - properly styled and positioned
+		if (plugin.short_description) {
+			const description = this.createElement('p', { 
+				class: 'wps-plugin-description',
+				style: 'font-size: 0.9rem; color: #e0e0e0; line-height: 1.4; margin: 0.5rem 0 1rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;'
+			}, this.sanitizeAndDecodeText(plugin.short_description));
+			info.appendChild(description);
+		}
+		
+		// Meta (rating and installs)
+		const meta = this.createElement('div', { class: 'wps-plugin-meta' });
+		
+		// Rating
+		if (plugin.rating) {
+			const rating = Math.round(plugin.rating / 20);
+			const stars = '★'.repeat(rating) + '☆'.repeat(5 - rating);
+			const ratingDiv = this.createElement('div', { class: 'wps-plugin-rating' });
+			ratingDiv.innerHTML = `<span class="wps-rating-stars">${stars}</span> <span class="wps-rating-text">(${plugin.num_ratings || 0})</span>`;
+			meta.appendChild(ratingDiv);
+		}
+		
+		// Installs
+		if (plugin.active_installs) {
+			const installs = this.createElement('div', { class: 'wps-plugin-installs' }, `${plugin.active_installs.toLocaleString()}+ installs`);
+			meta.appendChild(installs);
+		}
+		
+		info.appendChild(meta);
+		item.appendChild(info);
+		
+		// MOVED: Screenshot slider now comes AFTER title/description/meta
+		const slider = this.createScreenshotSlider(plugin, index);
+		item.appendChild(slider);
+		
+		// Click handler for WordPress.org link
+		item.addEventListener('click', (e) => {
+			// Don't trigger if clicking on navigation elements or images
+			if (e.target.closest('.wps-screenshot-thumb, .wps-main-screenshot img')) {
+				return;
+			}
+			
+			if (plugin.slug) {
+				const url = `https://wordpress.org/plugins/${encodeURIComponent(plugin.slug)}/`;
+				window.open(url, '_blank', 'noopener,noreferrer');
+			}
+		});
+		
+		return item;
+	}
+	
+	/**
+	 * Render error
+	 */
+	renderError(message) {
+		this.elements.grid.innerHTML = '';
+		
+		const errorDiv = this.createElement('div', { class: 'wps-error' });
+		errorDiv.innerHTML = `
+			<h3>Error</h3>
+			<p>${this.sanitizeInput(message)}</p>
+		`;
+		
+		// Create retry button with WordPress structure
+		const retryButtonContainer = this.createButton('Try Again', () => this.performSearch());
+		errorDiv.appendChild(retryButtonContainer.container);
+		
+		this.elements.grid.appendChild(errorDiv);
+	}
+}]]></content>
+  </file>
+  <file path="src/render.php">
+    <description>This file contains the render callback function for the block, which is responsible for rendering the block content on the front end. A render function should exist only if the block is dynamic.</description>
+    <content><![CDATA[<?php
+/**
+ * @see https://github.com/WordPress/gutenberg/blob/trunk/docs/reference-guides/block-api/block-metadata.md#render
+ */
+
+// Sanitize attributes
+$search_term = isset( $attributes['searchTerm'] ) ? sanitize_text_field( $attributes['searchTerm'] ) : '';
+$results_per_page = isset( $attributes['resultsPerPage'] ) ? max( 1, min( 100, (int) $attributes['resultsPerPage'] ) ) : 12;
+$default_sort = isset( $attributes['defaultSort'] ) ? sanitize_text_field( $attributes['defaultSort'] ) : 'popular';
+$show_filters = isset( $attributes['showFilters'] ) ? (bool) $attributes['showFilters'] : true;
+
+// Build data attributes for JavaScript
+$data_attributes = array(
+	'data-search-term' => esc_attr( $search_term ),
+	'data-results-per-page' => esc_attr( $results_per_page ),
+	'data-default-sort' => esc_attr( $default_sort ),
+	'data-show-filters' => esc_attr( $show_filters ? 'true' : 'false' ),
+);
+
+$block_wrapper_attributes = get_block_wrapper_attributes(
+	array_merge(
+		array( 'class' => 'wps-search-block' ),
+		$data_attributes
+	)
+);
+?>
+
+<div <?php echo $block_wrapper_attributes; ?>>
+	<div class="wps-loading-initial" aria-live="polite">
+		<div class="wps-spinner"></div>
+		<p><?php echo esc_html__( 'Loading Plugin Search...', 'wordpress-plugin-search-block-wp' ); ?></p>
+	</div>
+	
+	<noscript>
+		<div class="wps-no-javascript">
+			<h3><?php echo esc_html__( 'JavaScript Required', 'wordpress-plugin-search-block-wp' ); ?></h3>
+			<p>
+				<?php echo esc_html__( 'This plugin search requires JavaScript. Please visit', 'wordpress-plugin-search-block-wp' ); ?> 
+				<a href="https://wordpress.org/plugins/" target="_blank" rel="noopener noreferrer">
+					<?php echo esc_html__( 'WordPress.org Plugin Directory', 'wordpress-plugin-search-block-wp' ); ?>
+				</a> 
+				<?php echo esc_html__( 'directly.', 'wordpress-plugin-search-block-wp' ); ?>
+			</p>
+		</div>
+	</noscript>
+</div>]]></content>
+  </file>
+  <file path="package.json">
+    <description>The AI assistant should only edit 'user_provided_block_name_slug', 'description' and resolve 'isDynamicVariant' in this file and ALWAYS INCLUDE IT. This file includes the necessary scripts for building, formatting, and linting the block code. Dependencies are managed at the workspace level via pnpm.</description>
+    <content><![CDATA[  {
+	"name": "wordpress-plugin-search",
+	"version": "0.1.0",
+	"description": "A simple plugin search interface for the WordPress.org repository.",
+	"author": "WordPress Telex",
+	"license": "GPL-2.0-or-later",
+	"main": "build/index.js",
+	"scripts": {
+		"build": "wp-scripts build",
+		"format": "wp-scripts format",
+		"lint:css": "wp-scripts lint-style",
+		"lint:js": "wp-scripts lint-js",
+		"packages-update": "wp-scripts packages-update",
+		"plugin-zip": "wp-scripts plugin-zip",
+		"start": "wp-scripts start"
+	},
+    "devDependencies": {
+        "@wordpress/scripts": "^30.15.0"
+	}
+}]]></content>
+  </file>
+</artefact>

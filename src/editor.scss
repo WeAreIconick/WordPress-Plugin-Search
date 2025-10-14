@@ -1,0 +1,59 @@
+/**
+ * Editor-specific styles for the WordPress.org Plugin Search Block
+ */
+
+.wp-block-telex-block-wordpress-plugin-search {
+	// Editor preview styling
+	.wps-search-block__header {
+		border-bottom: 2px dashed #ddd;
+		padding-bottom: 1rem;
+	}
+
+	.wps-editor-note {
+		background: #e8f4f8;
+		border: 1px solid #b8daff;
+		border-radius: 4px;
+		padding: 0.75rem;
+		color: #0c5460;
+	}
+
+	// Disabled input styling in editor
+	.wps-search-input input:disabled,
+	.wps-filter-controls select:disabled {
+		cursor: not-allowed;
+		opacity: 0.7;
+	}
+}
+
+// Inspector controls styling
+.wps-control-group {
+	margin-bottom: 1rem;
+
+	label {
+		display: block;
+		margin-bottom: 0.5rem;
+		font-weight: 500;
+		font-size: 11px;
+		line-height: 1.4;
+		text-transform: uppercase;
+		color: #1e1e1e;
+	}
+
+	.components-button-group {
+		display: flex;
+		width: 100%;
+
+		.components-button {
+			flex: 1;
+			justify-content: center;
+		}
+	}
+}
+
+// Block editor specific overrides
+.block-editor-block-list__block[data-type="telex/block-wordpress-plugin-search"] {
+	// Ensure proper spacing in editor
+	.wp-block-telex-block-wordpress-plugin-search {
+		min-height: 400px;
+	}
+}

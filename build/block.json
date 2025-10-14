@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "telex/block-wordpress-plugin-search",
+  "version": "1.0.0",
+  "title": "WordPress.org Plugin Search",
+  "category": "widgets",
+  "icon": "admin-plugins",
+  "description": "A comprehensive plugin search interface with sorting and filtering for discovering hidden gems.",
+  "example": {
+    "attributes": {
+      "searchTerm": "security",
+      "resultsPerPage": 12,
+      "defaultSort": "rating",
+      "showFilters": true,
+      "align": "wide"
+    }
+  },
+  "attributes": {
+    "searchTerm": {
+      "type": "string",
+      "default": ""
+    },
+    "resultsPerPage": {
+      "type": "number",
+      "default": 12
+    },
+    "defaultSort": {
+      "type": "string",
+      "default": "popular"
+    },
+    "showFilters": {
+      "type": "boolean",
+      "default": true
+    },
+    "align": {
+      "type": "string",
+      "default": "wide"
+    }
+  },
+  "supports": {
+    "html": false,
+    "align": [
+      "wide",
+      "full"
+    ],
+    "spacing": {
+      "padding": true,
+      "margin": true
+    }
+  },
+  "textdomain": "wordpress-plugin-search-block-wp",
+  "editorScript": "file:./index.js",
+  "editorStyle": "file:./index.css",
+  "style": "file:./style-index.css",
+  "viewScript": "file:./view.js",
+  "render": "file:./render.php"
+}
