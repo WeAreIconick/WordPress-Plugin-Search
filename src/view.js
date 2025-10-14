@@ -1076,6 +1076,9 @@ class PluginSearchInterface {
 			page: this.state.currentPage.toString(),
 		};
 		
+		// Debug: Log search parameters
+		console.log( 'WordPress Plugin Search: Search params:', params );
+		
 		// Debug logging
 		console.log( 'Building search params:', params );
 
@@ -1110,13 +1113,16 @@ class PluginSearchInterface {
 		try {
 			this.currentRequest = new AbortController();
 
-			const url = new URL(
-				'/wp-json/wordpress-plugin-search/v1/query',
-				window.location.origin
-			);
-			Object.entries( params ).forEach( ( [ key, value ] ) => {
-				url.searchParams.set( key, value );
-			} );
+		const url = new URL(
+			'/wp-json/wordpress-plugin-search/v1/query',
+			window.location.origin
+		);
+		Object.entries( params ).forEach( ( [ key, value ] ) => {
+			url.searchParams.set( key, value );
+		} );
+		
+		// Debug: Log final URL
+		console.log( 'WordPress Plugin Search: Final URL:', url.toString() );
 
 			const response = await fetch( url.toString(), {
 				headers: {

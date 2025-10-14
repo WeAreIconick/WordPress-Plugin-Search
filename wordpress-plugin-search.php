@@ -92,6 +92,65 @@ if ( ! function_exists( 'wordpress_plugin_search_register_test_endpoint' ) ) {
 }
 
 /**
+ * Add cache clearing endpoint for debugging
+ */
+if ( ! function_exists( 'wordpress_plugin_search_register_cache_endpoint' ) ) {
+	function wordpress_plugin_search_register_cache_endpoint() {
+		register_rest_route( 'wordpress-plugin-search/v1', '/clear-cache', array(
+			'methods' => 'POST',
+			'callback' => function() {
+				global $wpdb;
+				$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_wps_%'" );
+				$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_timeout_wps_%'" );
+				return array(
+					'success' => true,
+					'message' => 'Plugin search cache cleared',
+					'timestamp' => current_time( 'mysql' )
+				);
+			},
+			'permission_callback' => '__return_true'
+		) );
+	}
+	add_action( 'rest_api_init', 'wordpress_plugin_search_register_cache_endpoint' );
+}
+
+/**
+ * Add cache debugging endpoint
+ */
+if ( ! function_exists( 'wordpress_plugin_search_register_cache_debug_endpoint' ) ) {
+	function wordpress_plugin_search_register_cache_debug_endpoint() {
+		register_rest_route( 'wordpress-plugin-search/v1', '/cache-debug', array(
+			'methods' => 'GET',
+			'callback' => function() {
+				global $wpdb;
+				$transients = $wpdb->get_results( 
+					"SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE '_transient_wps_%' ORDER BY option_name"
+				);
+				
+				$debug_info = array();
+				foreach ( $transients as $transient ) {
+					$key = str_replace( '_transient_', '', $transient->option_name );
+					$data = maybe_unserialize( $transient->option_value );
+					$debug_info[] = array(
+						'key' => $key,
+						'has_data' => ! empty( $data ),
+						'data_type' => gettype( $data ),
+						'plugin_count' => isset( $data['plugins'] ) ? count( $data['plugins'] ) : 0
+					);
+				}
+				
+				return array(
+					'total_transients' => count( $transients ),
+					'transients' => $debug_info
+				);
+			},
+			'permission_callback' => '__return_true'
+		) );
+	}
+	add_action( 'rest_api_init', 'wordpress_plugin_search_register_cache_debug_endpoint' );
+}
+
+/**
  * Handle API queries
  */
 if ( ! function_exists( 'wordpress_plugin_search_api_query' ) ) {
@@ -140,11 +199,18 @@ if ( ! function_exists( 'wordpress_plugin_search_api_query' ) ) {
 		$cache_params = $api_args;
 		$cache_key = 'wps_' . hash( 'sha256', wp_json_encode( $cache_params ) );
 		
+		// Debug: Log cache key and parameters
+		error_log( 'WordPress Plugin Search: Cache key: ' . $cache_key );
+		error_log( 'WordPress Plugin Search: Cache params: ' . wp_json_encode( $cache_params ) );
+		
 		// Check cache
 		$cached_response = get_transient( $cache_key );
 		if ( false !== $cached_response ) {
+			error_log( 'WordPress Plugin Search: Returning cached response for key: ' . $cache_key );
 			return rest_ensure_response( $cached_response );
 		}
+		
+		error_log( 'WordPress Plugin Search: No cache found, making API request' );
 		
 		// Set fields for performance
 		$api_args['fields'] = array(
