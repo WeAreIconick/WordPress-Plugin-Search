@@ -1455,7 +1455,11 @@ class PluginSearchInterface {
 			tabindex: '0',
 		} );
 
-		// MOVED: Plugin info section now comes FIRST
+		// Screenshot slider comes FIRST for consistent layout
+		const slider = this.createScreenshotSlider( plugin, index );
+		item.appendChild( slider );
+
+		// Plugin info section comes AFTER screenshot for proper alignment
 		const info = this.createElement( 'div', { class: 'wps-plugin-info' } );
 
 		// Title - properly decode HTML entities
@@ -1507,10 +1511,6 @@ class PluginSearchInterface {
 
 		info.appendChild( meta );
 		item.appendChild( info );
-
-		// MOVED: Screenshot slider now comes AFTER title/description/meta
-		const slider = this.createScreenshotSlider( plugin, index );
-		item.appendChild( slider );
 
 		// Click handler for WordPress.org link
 		item.addEventListener( 'click', ( e ) => {
