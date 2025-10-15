@@ -45,9 +45,8 @@ class PluginSearchInterface {
 		// Get block attributes
 		this.attributes = this.getBlockAttributes();
 
-		// Comprehensive state with filtering
+		// Simplified state for browse-only
 		this.state = {
-			searchTerm: this.sanitizeInput( this.attributes.searchTerm || '' ),
 			currentPage: 1,
 			resultsPerPage: Math.max(
 				1,
@@ -57,14 +56,9 @@ class PluginSearchInterface {
 				)
 			),
 			sortBy: this.attributes.defaultSort || 'popular',
-			category: 'all',
-			minRating: 0,
-			maxInstalls: null,
-			updatedWithin: 'any',
 			onlyWithScreenshots: false, // Start unchecked by default
 			isLoading: false,
 			plugins: [],
-			allPlugins: [], // Store unfiltered results
 			totalResults: 0,
 			showFilters: this.attributes.showFilters !== false,
 			hasMorePages: false,
@@ -72,20 +66,6 @@ class PluginSearchInterface {
 			screenshotCache: new Map(), // Cache screenshot validation results
 		};
 
-		// Plugin categories for filtering
-		this.categories = {
-			all: 'All Categories',
-			accessibility: 'Accessibility',
-			admin: 'Admin',
-			commerce: 'E-Commerce',
-			forms: 'Forms',
-			media: 'Media',
-			performance: 'Performance',
-			security: 'Security',
-			seo: 'SEO',
-			social: 'Social',
-			widgets: 'Widgets',
-		};
 
 		// Lightbox state - simplified and more robust
 		this.lightbox = {
@@ -168,7 +148,6 @@ class PluginSearchInterface {
 	getBlockAttributes() {
 		const data = this.block.dataset;
 		return {
-			searchTerm: this.sanitizeInput( data.searchTerm || '' ),
 			resultsPerPage: Math.max(
 				1,
 				Math.min( 100, parseInt( data.resultsPerPage ) || 12 )
@@ -568,13 +547,13 @@ class PluginSearchInterface {
 	}
 
 	/**
-	 * Render the complete interface with advanced controls
+	 * Render the complete interface - browse only
 	 */
 	renderInterface() {
 		this.block.innerHTML = '';
 
 		const container = this.createElement( 'div', {
-			class: 'wps-search-interface',
+			class: 'wps-browse-interface',
 		} );
 
 		// Header
@@ -585,14 +564,14 @@ class PluginSearchInterface {
 			this.createElement(
 				'h2',
 				{ class: 'wps-search-block__title' },
-				'WordPress Plugin Search'
+				'WordPress Plugin Directory'
 			)
 		);
 		header.appendChild(
 			this.createElement(
 				'p',
 				{ class: 'wps-search-block__description' },
-				'Search and discover plugins with advanced sorting and filtering.'
+				'Browse popular WordPress plugins from the official directory.'
 			)
 		);
 
@@ -601,31 +580,7 @@ class PluginSearchInterface {
 			class: 'wps-search-block__controls',
 		} );
 
-		// Search input
-		const inputWrapper = this.createElement( 'div', {
-			class: 'wps-search-input',
-		} );
-		const searchInput = this.createElement( 'input', {
-			type: 'search',
-			placeholder: 'Search plugins...',
-			value: this.state.searchTerm,
-		} );
-
-		// Create search button with WordPress structure
-		const searchButtonContainer = this.createButton( 'Search', () => {
-			this.state.searchTerm = this.sanitizeInput(
-				this.elements.searchInput.value
-			);
-			this.state.currentPage = 1;
-			this.state.plugins = [];
-			this.performSearch();
-		} );
-
-		inputWrapper.appendChild( searchInput );
-		inputWrapper.appendChild( searchButtonContainer.container );
-		controls.appendChild( inputWrapper );
-
-		// Advanced filters
+		// Simple filters
 		if ( this.state.showFilters ) {
 			const filterControls = this.createElement( 'div', {
 				class: 'wps-filter-controls',
@@ -647,10 +602,8 @@ class PluginSearchInterface {
 
 			const sortOptions = [
 				{ value: 'popular', label: 'Most Popular' },
-				{ value: 'rating', label: 'Highest Rated' },
-				{ value: 'installs', label: 'Most Installs' },
+				{ value: 'new', label: 'Newest' },
 				{ value: 'updated', label: 'Recently Updated' },
-				{ value: 'newest', label: 'Newest' },
 			];
 
 			sortOptions.forEach( ( option ) => {
@@ -668,107 +621,7 @@ class PluginSearchInterface {
 			sortItem.appendChild( sortSelect );
 			filterRow.appendChild( sortItem );
 
-			// Category filter - using WordPress core classes
-			const categoryItem = this.createElement( 'div', {
-				class: 'wps-filter-item',
-			} );
-			categoryItem.appendChild(
-				this.createElement( 'label', {}, 'Category' )
-			);
-			const categorySelect = this.createElement( 'select', {
-				class: 'components-select-control__input',
-			} );
-
-			Object.entries( this.categories ).forEach( ( [ value, label ] ) => {
-				const optionElement = this.createElement(
-					'option',
-					{ value },
-					label
-				);
-				if ( value === this.state.category ) {
-					optionElement.selected = true;
-				}
-				categorySelect.appendChild( optionElement );
-			} );
-
-			categoryItem.appendChild( categorySelect );
-			filterRow.appendChild( categoryItem );
-
-			// Min rating filter - using WordPress core classes
-			const ratingItem = this.createElement( 'div', {
-				class: 'wps-filter-item',
-			} );
-			ratingItem.appendChild(
-				this.createElement( 'label', {}, 'Min Rating' )
-			);
-			const ratingSelect = this.createElement( 'select', {
-				class: 'components-select-control__input',
-			} );
-
-			const ratingOptions = [
-				{ value: 0, label: 'Any Rating' },
-				{ value: 80, label: '4+ Stars' },
-				{ value: 60, label: '3+ Stars' },
-				{ value: 40, label: '2+ Stars' },
-			];
-
-			ratingOptions.forEach( ( option ) => {
-				const optionElement = this.createElement(
-					'option',
-					{ value: option.value },
-					option.label
-				);
-				if ( option.value === this.state.minRating ) {
-					optionElement.selected = true;
-				}
-				ratingSelect.appendChild( optionElement );
-			} );
-
-			ratingItem.appendChild( ratingSelect );
-			filterRow.appendChild( ratingItem );
-
-			// Max installs filter (for finding hidden gems) - using WordPress core classes
-			const installsItem = this.createElement( 'div', {
-				class: 'wps-filter-item',
-			} );
-			installsItem.appendChild(
-				this.createElement( 'label', {}, 'Max Installs' )
-			);
-			const installsSelect = this.createElement( 'select', {
-				class: 'components-select-control__input',
-			} );
-
-			const installsOptions = [
-				{ value: null, label: 'Any Amount' },
-				{ value: 1000, label: 'Under 1K (Hidden Gems)' },
-				{ value: 10000, label: 'Under 10K' },
-				{ value: 100000, label: 'Under 100K' },
-				{ value: 1000000, label: 'Under 1M' },
-			];
-
-			installsOptions.forEach( ( option ) => {
-				const optionElement = this.createElement(
-					'option',
-					{ value: option.value || '' },
-					option.label
-				);
-				if ( option.value === this.state.maxInstalls ) {
-					optionElement.selected = true;
-				}
-				installsSelect.appendChild( optionElement );
-			} );
-
-			installsItem.appendChild( installsSelect );
-			filterRow.appendChild( installsItem );
-
-			filterControls.appendChild( filterRow );
-
-			// Toggle filters row
-			const togglesRow = this.createElement( 'div', {
-				class: 'wps-filter-toggles',
-			} );
-
-			// Only with screenshots toggle - default UNCHECKED
+			// Only with screenshots toggle
 			const screenshotsToggle = this.createElement( 'div', {
 				class: 'wps-toggle-item',
 			} );
@@ -787,17 +640,14 @@ class PluginSearchInterface {
 
 			screenshotsToggle.appendChild( screenshotsCheckbox );
 			screenshotsToggle.appendChild( screenshotsLabel );
-			togglesRow.appendChild( screenshotsToggle );
+			filterRow.appendChild( screenshotsToggle );
 
-			filterControls.appendChild( togglesRow );
+			filterControls.appendChild( filterRow );
 			controls.appendChild( filterControls );
 
 			// Store filter element references
 			this.filterElements = {
 				sortSelect,
-				categorySelect,
-				ratingSelect,
-				installsSelect,
 				screenshotsCheckbox,
 			};
 		}
@@ -811,13 +661,7 @@ class PluginSearchInterface {
 			class: 'wps-results-count',
 		} );
 
-		// Create clear filters button with WordPress structure
-		const clearFiltersContainer = this.createButton( 'Clear Filters', () =>
-			this.clearAllFilters()
-		);
-
 		resultsInfo.appendChild( resultsCount );
-		resultsInfo.appendChild( clearFiltersContainer.container );
 
 		// Results
 		const results = this.createElement( 'div', {
@@ -832,7 +676,7 @@ class PluginSearchInterface {
 			this.createElement( 'div', { class: 'wps-spinner' } )
 		);
 		loading.appendChild(
-			this.createElement( 'p', {}, 'Searching plugins...' )
+			this.createElement( 'p', {}, 'Loading plugins...' )
 		);
 
 		results.appendChild( grid );
@@ -880,11 +724,8 @@ class PluginSearchInterface {
 
 		// Store references
 		this.elements = {
-			searchInput,
-			searchButton: searchButtonContainer.link,
 			resultsInfo,
 			resultsCount,
-			clearFilters: clearFiltersContainer.link,
 			grid,
 			loading,
 			pagination,
@@ -898,28 +739,6 @@ class PluginSearchInterface {
 	 * Bind events for all interactive elements
 	 */
 	bindEvents() {
-		// Search input
-		this.elements.searchInput.addEventListener( 'input', ( e ) => {
-			clearTimeout( this.searchTimeout );
-			this.searchTimeout = setTimeout( () => {
-				this.state.searchTerm = this.sanitizeInput( e.target.value );
-				this.state.currentPage = 1;
-				this.state.plugins = [];
-				this.performSearch();
-			}, 300 );
-		} );
-
-		// Enter key
-		this.elements.searchInput.addEventListener( 'keypress', ( e ) => {
-			if ( e.key === 'Enter' ) {
-				e.preventDefault();
-				this.state.searchTerm = this.sanitizeInput( e.target.value );
-				this.state.currentPage = 1;
-				this.state.plugins = [];
-				this.performSearch();
-			}
-		} );
-
 		// Filter controls
 		if ( this.filterElements ) {
 			// Sort by
@@ -933,42 +752,7 @@ class PluginSearchInterface {
 				}
 			);
 
-			// Category
-			this.filterElements.categorySelect.addEventListener(
-				'change',
-				( e ) => {
-					this.state.category = e.target.value;
-					this.state.currentPage = 1;
-					this.state.plugins = [];
-					this.performSearch();
-				}
-			);
-
-			// Min rating
-			this.filterElements.ratingSelect.addEventListener(
-				'change',
-				( e ) => {
-					this.state.minRating = parseInt( e.target.value );
-					this.state.currentPage = 1;
-					this.state.plugins = [];
-					this.performSearch();
-				}
-			);
-
-			// Max installs
-			this.filterElements.installsSelect.addEventListener(
-				'change',
-				( e ) => {
-					this.state.maxInstalls = e.target.value
-						? parseInt( e.target.value )
-						: null;
-					this.state.currentPage = 1;
-					this.state.plugins = [];
-					this.performSearch();
-				}
-			);
-
-			// Screenshots only toggle - FIXED event handling
+			// Screenshots only toggle
 			this.filterElements.screenshotsCheckbox.addEventListener(
 				'change',
 				async ( e ) => {
@@ -985,7 +769,7 @@ class PluginSearchInterface {
 						this.updateResultsInfo();
 						this.setLoading( false );
 					} else if ( ! this.state.onlyWithScreenshots ) {
-						// If toggling OFF, refresh search to show all plugins
+						// If toggling OFF, refresh browse to show all plugins
 						this.state.currentPage = 1;
 						this.state.plugins = [];
 						this.performSearch();
@@ -1026,34 +810,25 @@ class PluginSearchInterface {
 	}
 
 	/**
-	 * Clear all filters
+	 * Reset filters to defaults
 	 */
-	clearAllFilters() {
-		this.state.searchTerm = '';
+	resetFilters() {
 		this.state.sortBy = this.attributes.defaultSort || 'popular';
-		this.state.category = 'all';
-		this.state.minRating = 0;
-		this.state.maxInstalls = null;
 		this.state.onlyWithScreenshots = false;
 		this.state.currentPage = 1;
 		this.state.plugins = [];
 
 		// Update UI
-		this.elements.searchInput.value = '';
 		if ( this.filterElements ) {
 			this.filterElements.sortSelect.value = this.state.sortBy;
-			this.filterElements.categorySelect.value = this.state.category;
-			this.filterElements.ratingSelect.value = this.state.minRating;
-			this.filterElements.installsSelect.value = '';
-			this.filterElements.screenshotsCheckbox.checked =
-				this.state.onlyWithScreenshots;
+			this.filterElements.screenshotsCheckbox.checked = this.state.onlyWithScreenshots;
 		}
 
 		this.performSearch();
 	}
 
 	/**
-	 * Perform search with current parameters
+	 * Browse plugins with current parameters
 	 *
 	 * @param {boolean} appendMode - Whether to append results or replace them
 	 */
@@ -1066,49 +841,29 @@ class PluginSearchInterface {
 			this.setLoading( true );
 		}
 
-		// Build search parameters
+		// Build browse parameters
 		const params = {
 			action: 'query_plugins',
-			// FIXED: Load more plugins when screenshot filter is active
 			per_page: this.state.onlyWithScreenshots
 				? Math.min( 100, this.state.resultsPerPage * 3 ).toString()
 				: this.state.resultsPerPage.toString(),
 			page: this.state.currentPage.toString(),
 		};
 		
-		// Debug: Log search parameters
-		console.log( 'WordPress Plugin Search: Search params:', params );
-		
-		// Debug logging
-		console.log( 'Building search params:', params );
-
-		// Add search term
-		if ( this.state.searchTerm ) {
-			params.search = this.state.searchTerm;
-		}
+		// Debug: Log browse parameters
+		console.log( 'WordPress Plugin Browse: Browse params:', params );
 
 		// Handle sorting
-		if ( this.state.sortBy === 'newest' ) {
+		if ( this.state.sortBy === 'new' ) {
 			params.browse = 'new';
 		} else if ( this.state.sortBy === 'updated' ) {
 			params.browse = 'updated';
 		} else {
 			params.browse = 'popular';
 		}
-
-		// Add category search
-		if ( this.state.category !== 'all' ) {
-			// Combine category with existing search
-			const categoryTerm = this.state.category;
-			if ( this.state.searchTerm ) {
-				params.search = `${ this.state.searchTerm } ${ categoryTerm }`;
-			} else {
-				params.search = categoryTerm;
-			}
-		}
 		
 		// Debug logging - show final params
-		console.log( 'Final search params:', params );
+		console.log( 'Final browse params:', params );
 
 		try {
 			this.currentRequest = new AbortController();
@@ -1239,38 +994,9 @@ class PluginSearchInterface {
 	 * @return {Array} Filtered array of plugins
 	 */
 	applyClientFilters( plugins ) {
-		let filteredPlugins = [ ...plugins ];
-
-		// Filter by minimum rating
-		if ( this.state.minRating > 0 ) {
-			filteredPlugins = filteredPlugins.filter( ( plugin ) => {
-				return plugin.rating && plugin.rating >= this.state.minRating;
-			} );
-		}
-
-		// Filter by maximum installs (for hidden gems)
-		if ( this.state.maxInstalls ) {
-			filteredPlugins = filteredPlugins.filter( ( plugin ) => {
-				return (
-					! plugin.active_installs ||
-					plugin.active_installs <= this.state.maxInstalls
-				);
-			} );
-		}
-
-		// Apply custom sorting
-		if ( this.state.sortBy === 'rating' ) {
-			filteredPlugins.sort(
-				( a, b ) => ( b.rating || 0 ) - ( a.rating || 0 )
-			);
-		} else if ( this.state.sortBy === 'installs' ) {
-			filteredPlugins.sort(
-				( a, b ) =>
-					( b.active_installs || 0 ) - ( a.active_installs || 0 )
-			);
-		}
-
-		return filteredPlugins;
+		// For browse-only mode, just return plugins as-is
+		// The server-side sorting handles the main sorting logic
+		return [ ...plugins ];
 	}
 
 	/**
@@ -1665,20 +1391,19 @@ class PluginSearchInterface {
 				class: 'wps-no-results',
 			} );
 
-			if ( this.state.searchTerm || this.hasActiveFilters() ) {
+			if ( this.hasActiveFilters() ) {
 				noResults.innerHTML = `
-					<p>No plugins found matching your criteria.</p>
+					<p>No plugins found matching your filter criteria.</p>
 					<div class="wps-search-suggestion">
 						<p>Try:</p>
 						<ul>
-							<li>Using different keywords</li>
-							<li>Reducing filter restrictions</li>
-							<li>Searching for <strong>"performance"</strong>, <strong>"security"</strong>, or <strong>"forms"</strong></li>
+							<li>Changing the sort order</li>
+							<li>Disabling the screenshots filter</li>
 						</ul>
 					</div>
 				`;
 			} else {
-				noResults.textContent = 'No plugins found.';
+				noResults.textContent = 'No plugins available at the moment.';
 			}
 
 			this.elements.grid.appendChild( noResults );
@@ -1706,10 +1431,6 @@ class PluginSearchInterface {
 	 */
 	hasActiveFilters() {
 		return (
-			this.state.searchTerm ||
-			this.state.category !== 'all' ||
-			this.state.minRating > 0 ||
-			this.state.maxInstalls !== null ||
 			this.state.onlyWithScreenshots ||
 			this.state.sortBy !== ( this.attributes.defaultSort || 'popular' )
 		);
@@ -1812,6 +1533,7 @@ class PluginSearchInterface {
 
 		return item;
 	}
+
 
 	/**
 	 * Render error message

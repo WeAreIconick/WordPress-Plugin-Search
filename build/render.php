@@ -4,14 +4,12 @@
  */
 
 // Sanitize attributes
-$search_term = isset( $attributes['searchTerm'] ) ? sanitize_text_field( $attributes['searchTerm'] ) : '';
 $results_per_page = isset( $attributes['resultsPerPage'] ) ? max( 1, min( 100, (int) $attributes['resultsPerPage'] ) ) : 12;
 $default_sort = isset( $attributes['defaultSort'] ) ? sanitize_text_field( $attributes['defaultSort'] ) : 'popular';
 $show_filters = isset( $attributes['showFilters'] ) ? (bool) $attributes['showFilters'] : true;
 
 // Build data attributes for JavaScript
 $data_attributes = array(
-	'data-search-term' => esc_attr( $search_term ),
 	'data-results-per-page' => esc_attr( $results_per_page ),
 	'data-default-sort' => esc_attr( $default_sort ),
 	'data-show-filters' => esc_attr( $show_filters ? 'true' : 'false' ),
@@ -23,7 +21,7 @@ $block_wrapper_attributes = get_block_wrapper_attributes( $data_attributes );
 <div <?php echo $block_wrapper_attributes; ?>>
 	<div class="wps-loading-initial" aria-live="polite">
 		<div class="wps-spinner"></div>
-		<p><?php echo esc_html__( 'Loading Plugin Search...', 'wordpress-plugin-search-block-wp' ); ?></p>
+		<p><?php echo esc_html__( 'Loading Plugin Directory...', 'wordpress-plugin-search-block-wp' ); ?></p>
 	</div>
 	
 	<noscript>

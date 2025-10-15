@@ -43,13 +43,9 @@ if ( ! function_exists( 'wordpress_plugin_search_register_api_endpoints' ) ) {
 					'enum' => array( 'query_plugins' ),
 					'sanitize_callback' => 'sanitize_text_field',
 				),
-				'search' => array(
-					'type' => 'string',
-					'sanitize_callback' => 'sanitize_text_field',
-				),
 				'browse' => array(
 					'type' => 'string',
-					'enum' => array( 'popular', 'new', 'updated' ),
+					'enum' => array( 'popular', 'new', 'updated', 'featured', 'beta' ),
 					'default' => 'popular',
 					'sanitize_callback' => 'sanitize_text_field',
 				),
@@ -64,11 +60,24 @@ if ( ! function_exists( 'wordpress_plugin_search_register_api_endpoints' ) ) {
 					'minimum' => 1,
 					'default' => 1,
 				),
+				'author' => array(
+					'type' => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+				),
+				'user' => array(
+					'type' => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+				),
+				'tag' => array(
+					'type' => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+				),
 			),
 		) );
 	}
 	add_action( 'rest_api_init', 'wordpress_plugin_search_register_api_endpoints' );
 }
+
 
 /**
  * Add test endpoint for debugging
@@ -169,18 +178,16 @@ if ( ! function_exists( 'wordpress_plugin_search_api_query' ) ) {
 		// Build API parameters first
 		$api_args = array();
 		
-		// Always set a default browse parameter
+		// Handle browse parameter with more options
 		$browse = $request->get_param( 'browse' );
-		if ( $browse && in_array( $browse, array( 'popular', 'new', 'updated' ), true ) ) {
+		if ( $browse && in_array( $browse, array( 'popular', 'new', 'updated', 'featured', 'beta' ), true ) ) {
 			$api_args['browse'] = $browse;
 		} else {
 			$api_args['browse'] = 'popular'; // Default to popular plugins
 		}
 		
-		if ( $request->get_param( 'search' ) ) {
-			$api_args['search'] = sanitize_text_field( $request->get_param( 'search' ) );
-		}
 		
+		// Handle per_page parameter
 		if ( $request->get_param( 'per_page' ) ) {
 			$per_page = absint( $request->get_param( 'per_page' ) );
 			if ( $per_page > 0 && $per_page <= 100 ) {
@@ -188,11 +195,25 @@ if ( ! function_exists( 'wordpress_plugin_search_api_query' ) ) {
 			}
 		}
 		
+		// Handle page parameter
 		if ( $request->get_param( 'page' ) ) {
 			$page = absint( $request->get_param( 'page' ) );
 			if ( $page > 0 ) {
 				$api_args['page'] = $page;
 			}
+		}
+
+		// Handle additional parameters for better search
+		if ( $request->get_param( 'author' ) ) {
+			$api_args['author'] = sanitize_text_field( $request->get_param( 'author' ) );
+		}
+
+		if ( $request->get_param( 'user' ) ) {
+			$api_args['user'] = sanitize_text_field( $request->get_param( 'user' ) );
+		}
+
+		if ( $request->get_param( 'tag' ) ) {
+			$api_args['tag'] = sanitize_text_field( $request->get_param( 'tag' ) );
 		}
 		
 		// Build cache key based on actual API parameters

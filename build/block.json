@@ -3,24 +3,19 @@
   "apiVersion": 3,
   "name": "telex/block-wordpress-plugin-search",
   "version": "1.0.0",
-  "title": "WordPress.org Plugin Search",
+  "title": "WordPress.org Plugin Directory",
   "category": "widgets",
   "icon": "admin-plugins",
-  "description": "A comprehensive plugin search interface with sorting and filtering for discovering hidden gems.",
+  "description": "Browse popular WordPress plugins from the official directory with sorting and filtering options.",
   "example": {
     "attributes": {
-      "searchTerm": "security",
       "resultsPerPage": 12,
-      "defaultSort": "rating",
+      "defaultSort": "popular",
       "showFilters": true,
       "align": "wide"
     }
   },
   "attributes": {
-    "searchTerm": {
-      "type": "string",
-      "default": ""
-    },
     "resultsPerPage": {
       "type": "number",
       "default": 12

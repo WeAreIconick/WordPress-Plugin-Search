@@ -43,7 +43,7 @@ import './editor.scss';
  * @return {Element} Element to render.
  */
 export default function Edit( { attributes, setAttributes } ) {
-	const { searchTerm, resultsPerPage, defaultSort, showFilters } = attributes;
+	const { resultsPerPage, defaultSort, showFilters } = attributes;
 
 	const [ previewPlugins, setPreviewPlugins ] = useState( [] );
 	const [ isLoading, setIsLoading ] = useState( true );
@@ -144,20 +144,12 @@ export default function Edit( { attributes, setAttributes } ) {
 			value: 'popular',
 		},
 		{
-			label: __( 'Highest Rated', 'wordpress-plugin-search-block-wp' ),
-			value: 'rating',
-		},
-		{
-			label: __( 'Most Installs', 'wordpress-plugin-search-block-wp' ),
-			value: 'installs',
-		},
-		{
 			label: __( 'Recently Updated', 'wordpress-plugin-search-block-wp' ),
 			value: 'updated',
 		},
 		{
 			label: __( 'Newest', 'wordpress-plugin-search-block-wp' ),
-			value: 'newest',
+			value: 'new',
 		},
 	];
 
@@ -292,26 +284,11 @@ export default function Edit( { attributes, setAttributes } ) {
 			<InspectorControls>
 				<PanelBody
 					title={ __(
-						'Search Settings',
+						'Browse Settings',
 						'wordpress-plugin-search-block-wp'
 					) }
 					initialOpen={ true }
 				>
-					<TextControl
-						label={ __(
-							'Default Search Term',
-							'wordpress-plugin-search-block-wp'
-						) }
-						value={ searchTerm }
-						onChange={ ( value ) =>
-							setAttributes( { searchTerm: value } )
-						}
-						help={ __(
-							'Pre-populate the search field with this term',
-							'wordpress-plugin-search-block-wp'
-						) }
-					/>
-
 					<SelectControl
 						label={ __(
 							'Default Sort Order',
@@ -352,7 +329,7 @@ export default function Edit( { attributes, setAttributes } ) {
 							setAttributes( { showFilters: value } )
 						}
 						help={ __(
-							'Display advanced filtering options to users',
+							'Display sorting and filtering options to users',
 							'wordpress-plugin-search-block-wp'
 						) }
 					/>
@@ -363,37 +340,19 @@ export default function Edit( { attributes, setAttributes } ) {
 				<div className="wps-search-block__header">
 					<h2 className="wps-search-block__title">
 						{ __(
-							'WordPress Plugin Search',
+							'WordPress Plugin Directory',
 							'wordpress-plugin-search-block-wp'
 						) }
 					</h2>
 					<p className="wps-search-block__description">
 						{ __(
-							'Search and discover plugins with advanced sorting and filtering.',
+							'Browse popular WordPress plugins from the official directory.',
 							'wordpress-plugin-search-block-wp'
 						) }
 					</p>
 				</div>
 
 				<div className="wps-search-block__controls">
-					<div className="wps-search-input">
-						<input
-							type="text"
-							placeholder={ __(
-								'Search plugins...',
-								'wordpress-plugin-search-block-wp'
-							) }
-							value={ searchTerm }
-							disabled
-							readOnly
-						/>
-						<button type="button" disabled>
-							{ __(
-								'Search',
-								'wordpress-plugin-search-block-wp'
-							) }
-						</button>
-					</div>
 
 					{ showFilters && (
 						<div className="wps-filter-controls">
@@ -417,50 +376,11 @@ export default function Edit( { attributes, setAttributes } ) {
 								<div className="wps-filter-item">
 									<label>
 										{ __(
-											'Category',
+											'Only with screenshots',
 											'wordpress-plugin-search-block-wp'
 										) }
 									</label>
-									<select disabled>
-										<option>
-											{ __(
-												'All Categories',
-												'wordpress-plugin-search-block-wp'
-											) }
-										</option>
-									</select>
-								</div>
-								<div className="wps-filter-item">
-									<label>
-										{ __(
-											'Min Rating',
-											'wordpress-plugin-search-block-wp'
-										) }
-									</label>
-									<select disabled>
-										<option>
-											{ __(
-												'Any Rating',
-												'wordpress-plugin-search-block-wp'
-											) }
-										</option>
-									</select>
-								</div>
-								<div className="wps-filter-item">
-									<label>
-										{ __(
-											'Max Installs',
-											'wordpress-plugin-search-block-wp'
-										) }
-									</label>
-									<select disabled>
-										<option>
-											{ __(
-												'Any Amount',
-												'wordpress-plugin-search-block-wp'
-											) }
-										</option>
-									</select>
+									<input type="checkbox" disabled />
 								</div>
 							</div>
 						</div>
@@ -483,7 +403,7 @@ export default function Edit( { attributes, setAttributes } ) {
 							<Spinner />
 							<p>
 								{ __(
-									'Loading plugins...',
+									'Loading plugin directory...',
 									'wordpress-plugin-search-block-wp'
 								) }
 							</p>
@@ -495,7 +415,7 @@ export default function Edit( { attributes, setAttributes } ) {
 							) : (
 								<p className="wps-no-results">
 									{ __(
-										'No plugins found. This is a preview in the editor.',
+										'No plugins to display. This is a preview in the editor.',
 										'wordpress-plugin-search-block-wp'
 									) }
 								</p>
@@ -507,7 +427,7 @@ export default function Edit( { attributes, setAttributes } ) {
 				<div className="wps-search-block__footer">
 					<p className="wps-editor-note">
 						{ __(
-							'This is an editor preview. Full search, filtering, and screenshot viewing will work on the front end.',
+							'This is an editor preview. Full browsing, sorting, filtering, and screenshot viewing will work on the front end.',
 							'wordpress-plugin-search-block-wp'
 						) }
 					</p>
