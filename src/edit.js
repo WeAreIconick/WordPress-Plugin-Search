@@ -188,7 +188,6 @@ export default function Edit( { attributes, setAttributes } ) {
 		if ( ! plugin.screenshots || plugin.screenshots.length === 0 ) {
 			return (
 				<div className="wps-no-screenshot">
-					<span className="dashicons dashicons-format-image"></span>
 					<span>No screenshots available</span>
 				</div>
 			);
@@ -208,7 +207,7 @@ export default function Edit( { attributes, setAttributes } ) {
 						onError={ ( e ) => {
 							e.target.style.display = 'none';
 							e.target.parentNode.innerHTML =
-								'<div class="wps-no-screenshot"><span class="dashicons dashicons-format-image"></span><span>No screenshots available</span></div>';
+								'<div class="wps-no-screenshot"><span>No screenshots available</span></div>';
 						} }
 					/>
 				</div>

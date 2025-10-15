@@ -1217,7 +1217,7 @@ class PluginSearchInterface {
 				class: 'wps-no-screenshot',
 			} );
 			placeholder.innerHTML =
-				'<span class="dashicons dashicons-format-image"></span><span>No screenshots available</span>';
+				'<span>No screenshots available</span>';
 			sliderContainer.appendChild( placeholder );
 			return sliderContainer;
 		}
@@ -1253,7 +1253,7 @@ class PluginSearchInterface {
 		img.addEventListener( 'error', ( e ) => {
 			// Show placeholder if image fails to load
 			mainImage.innerHTML =
-				'<div class="wps-no-screenshot"><span class="dashicons dashicons-format-image"></span><span>No screenshots available</span></div>';
+				'<div class="wps-no-screenshot"><span>No screenshots available</span></div>';
 		} );
 
 		// ROBUST: Click to open lightbox with comprehensive error handling
